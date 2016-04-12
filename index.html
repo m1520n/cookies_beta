@@ -1,0 +1,759 @@
+<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
+
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <title>Pozytywka.com - ciastkobranie</title>
+
+    <style>
+        canvas {
+            display: block;
+            position: absolute;
+            margin: auto;
+            top: 0;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            font-family: '3dumbregular';
+
+        @font-face {
+            font-family: '3dumbregular';
+            src: url('resources/3dumb-webfont.eot');
+            src: url('resources/3dumb-webfont.eot?#iefix') format('embedded-opentype'),
+                 url('resources/3dumb-webfont.woff2') format('woff2'),
+                 url('resources/3dumb-webfont.woff') format('woff'),
+                 url('resources/3dumb-webfont.ttf') format('truetype'),
+                 url('resources/3dumb-webfont.svg#3dumbregular') format('svg');
+            font-weight: normal;
+            font-style: normal;
+        }
+    </style>
+    </head>
+
+    <body>
+
+    <noscript>
+        <p>Do poprawnego działania gry, należy włączyć obsługę języka JavaScript.
+        Tu znajdziesz <a href="http://www.enable-javascript.com/pl" target="_blank">
+        instrukcje, jak włączyć obsługę JavaScript w Twojej przeglądarce</a>.</p>
+    </noscript>
+    <script src="sprite.js"></script>
+    <script>
+        
+    (function() {
+        
+        'use strict';
+        
+        var
+        
+        //--------------------------------------------------------
+        //    Canvas vars
+        //--------------------------------------------------------
+
+        canvas,
+        ctx,
+        width,
+        height,
+        mx,         // cursor position
+        my,         // cursor position
+        event,
+
+        //--------------------------------------------------------
+        //  Game vars
+        //--------------------------------------------------------
+
+        currentGameState,
+            
+        test,
+
+        gameStates = {
+            Splash: 0,
+            Game: 1,
+            Score: 2
+        },
+
+        cookieTypes = {
+            regular: 0,
+            invincible: 1,
+            gravity: 2
+        },
+
+        frames = 0,         //used for transitions
+
+        score = 0,
+        bestScore = localStorage.getItem("bestScore") || 0,
+
+        pi = Math.PI,       //PI var for convenience
+
+        //--------------------------------------------------------
+        //    AUDIO ASSETS
+        //--------------------------------------------------------
+        
+        birdSound,
+        popSound,
+        deadSound,
+        eatSound,
+        boostSound,
+        gravitySound,
+            
+        sounds = {
+            bird: "resources/ball.m4a",
+            pop: "resources/pop.mp3",
+            dead: "resources/bird.mp3",
+            eatCookie: "resources/eat.mp3",
+            boost: "resources/boost.mp3",
+            gravity: "resources/gravity.mp3"
+        },
+
+        //--------------------------------------------------------
+        //    GAME ACTORS
+        //--------------------------------------------------------
+            
+        // Bird - player character
+        bird = {
+            x: 0,               // bird x position
+            y: 0,               // bird y position
+            frame: 0,           // initial frame count
+            g: 0.7,             // gravity
+            vx: 7,              // initial x velocity
+            vy: -7,             // initial y velocity
+            mass: 0.5,
+            
+            bounceFactor: 0.8,  // used for bouncing after death
+            rotation: 0,        // rotation for rotate function
+            radius: 0,
+            xCenter: 0, 
+            yCenter: 0,
+
+            dead: false,        //dead state
+            invincible: false,
+
+            draw: function(ctx) {
+                if(!this.dead) {
+                    ctx.save();
+                    spriteBird[this.frame].draw(ctx, this.x, this.y);
+                    ctx.restore();
+                    
+                    if (currentGameState === gameStates.Splash) {
+                        this.wobble();
+                    }
+                } else {
+                    ctx.save();
+                    ctx.translate(this.x+spriteBird[this.frame].width/2, this.y+spriteBird[this.frame].height/2);
+                    ctx.rotate(this.rotation);
+                    ctx.translate(-(this.x+spriteBird[this.frame].width/2), -(this.y+spriteBird[this.frame].height/2));
+                    spriteBird[this.frame].draw(ctx, this.x, this.y);
+                    ctx.restore();
+                    this.rotation += 0.2;
+                }
+
+            },
+
+            flypUp: function(ctx) {
+                if (this.vy > -8) this.vy = -8;       // make sure the jump is always in upward direction
+                if (this.vy < -8) this.vy = -8;       // make sure the jumping is linear
+                popSound.currentTime = 0;
+                popSound.play();
+            },
+
+            eat: function() {
+                if (this.x <= cookie.x + spriteCookie[0].width &&
+                cookie.x + spriteCookie[0].width <= this.x + spriteBird[this.frame].width &&
+                this.y <= cookie.y + spriteCookie[0].height &&
+                cookie.y <= this.y + spriteBird[this.frame].height
+                ) {               
+                    if (cookie.cookieType == cookieTypes.invincible) {
+                        this.invincible = true; 
+                        this.vx = 12 * (this.vx && this.vx / Math.abs(this.vx));
+                        
+                        boostSound.currentTime = 0;
+                        boostSound.play();
+                        
+                        setTimeout(function() {
+                            bird.invincible = false;
+                            bird.vx = 6 * (bird.vx && bird.vx / Math.abs(bird.vx));
+                        }, 5000);
+                    }
+                    
+                    if (cookie.cookieType == cookieTypes.gravity) {
+                        this.g = 0.75;
+                        
+                        gravitySound.currentTime = 0;
+                        gravitySound.play();
+                        
+                        setTimeout(function() {
+                            bird.g = 0.5;
+                        }, 5000);
+                    }
+                    
+                    if (!this.dead) score++;    //increase points only when alive
+                    
+                    eatSound.currentTime = 0;
+                    eatSound.play();
+                    
+                    cookie.eaten = 1;           //cookie state  
+                    cookie.respawn();           //cookie respawn
+                }
+            },
+
+            respawn: function() {
+                score = 0;          // reset score
+                this.dead = 0;      // reset dead state
+                this.invincible = 0 // reset invincible state
+                this.frame = 0;     // reset frame count
+                
+                this.g = 0.5;       // reset the gravity
+                this.vx = 7;        // reset x velocity
+                this.vy = -7;       // reset y velocity
+                
+                this.x = (width / 2) - (spriteBird[this.frame].width / 2);
+                this.y = (height / 2) - (spriteBird[this.frame].height / 2);             
+            },
+
+            hitBall: function() {
+                this.xCenter = this.x + this.radius;
+                this.yCenter = this.y + this.radius;
+                if (this.xCenter + this.radius + ball.radius > ball.xCenter
+                && this.xCenter < ball.xCenter + this.radius + ball.radius
+                && this.yCenter + this.radius + ball.radius > ball.yCenter
+                && this.yCenter < ball.yCenter + this.radius + ball.radius) {
+                    
+                    var distance = Math.sqrt(
+                                    ((this.xCenter - ball.xCenter) * (this.xCenter - ball.xCenter))
+                                  + ((this.yCenter - ball.yCenter) * (this.yCenter - ball.yCenter))
+                                  );
+                    if (distance < this.radius + ball.radius)
+                    {
+                        var collisionPointX = ((bird.x * ball.radius) + (ball.x * bird.radius))
+                                         / (bird.radius + ball.radius);   
+                        var collisionPointX = ((bird.y * ball.radius) + (ball.y * bird.radius))
+                                         / (bird.radius + ball.radius);
+                        
+                        ball.vx = (ball.vx * (ball.mass - this.mass)) + (2 * this.mass * this.vx)
+                                / (this.mass + ball.mass);
+                        ball.vy = (ball.vy * (ball.mass - this.mass)) + (2 * this.mass * this.vy)
+                                / (this.mass + ball.mass);
+                        
+                        if (!this.dead && !this.invincible) {
+                            this.vx = (this.vx * (this.mass - ball.mass)) + (2 * ball.mass * ball.vx)
+                                    / (this.mass + ball.mass);
+                            this.vy = (this.vy * (this.mass - ball.mass)) + (2 * ball.mass * ball.vy)
+                                    / (this.mass + ball.mass);
+                                this.die();
+                        }
+                    }
+                }
+            },
+
+            die: function() {
+                deadSound.play();                       // play dead sound
+                this.dead = true;                       // change dead state to true
+                currentGameState = gameStates.Score;    // change game state to Score
+            },
+
+
+            update: function() {
+                this.x += this.vx;          // update bird x position by x velocity
+                this.y += this.vy;          // update bird y position by y velocity
+                this.vy += this.g;          // update velocity by gravity value
+
+                // Change animation frame depending on vertical velocity
+                if (this.vx < 0) {
+                    if (this.vy < 0) {
+                        this.frame = 1;
+                    } else {
+                        this.frame = 3;
+                    }
+                } else {
+                    if (this.vy > 0) {
+                        this.frame = 0;
+                    } else {
+                        this.frame = 2;
+                    }
+                }
+
+                // bounce from the floor
+                if (this.y + 75 > height) {
+                    this.y = height - 75;                               // reposition the bird if it goes outside the boundries
+                    this.vy = -this.vy * this.bounceFactor;             // reverse the direction
+                    if (!this.dead) this.die();                         // change dead state to true
+                }
+
+               // bounce from the ceiling
+               if (this.y < 25) {
+                   this.y = 25;                                         // reposition the bird if it goes outside the boundries
+                   this.vy = -this.vy;                                  // reverse the direction
+                   if (!this.dead) this.die();                          // change dead state to true
+               }
+
+               // bounce form left wall
+               if (this.x < 0) {
+                   this.x = 0;
+                   this.vx = -this.vx;                                  // reverse the direction
+                   birdSound.currentTime = 0;
+                   birdSound.play();
+               }
+
+               // bounce from right wall
+               if (this.x + spriteBird[this.frame].width > width) {
+                   this.x = width - spriteBird[this.frame].width;
+                   this.vx = -this.vx;                                  // reverse the direction
+                   birdSound.currentTime = 0;
+                   birdSound.play();
+               }
+            },
+
+            wobble: function() {
+                this.y += Math.cos(frames/15);
+            }
+        },
+        
+        // Spikes on the floor and ceiling
+        spike = {
+            draw: function(ctx) {
+                var numberOfSpikes= Math.ceil(canvas.width/50)
+                var x = 0;
+                for (var i=1; i <= numberOfSpikes; i++) {
+
+                    ctx.save();
+
+                    ctx.fillStyle = "#fff";
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(25 + x, 30);
+                    ctx.lineTo(50 + x, 0);
+                    ctx.fill();
+
+                    ctx.fillStyle = "#fff";
+                    ctx.beginPath();
+                    ctx.moveTo(x, height);
+                    ctx.lineTo(25 + x, height - 30);
+                    ctx.lineTo(50 + x, height);
+                    ctx.fill();
+
+                    ctx.restore();
+
+                    x += 50;
+                }
+            }
+        },
+
+        // Cookie object
+        cookie = {
+            x: 0,
+            y: 0,
+            
+            eaten: 0,
+            cookiePositions: [],
+            lastCookiePos: null,
+            currentCookieSide: null,
+            lastCookieSide: null,
+            
+            cookieType: cookieTypes.regular,
+            
+            draw: function(ctx) {
+                if (this.eaten == 0) spriteCookie[this.cookieType].draw(ctx, this.x, this.y);
+                ctx.restore();
+                if (cookie.y > canvas.height) cookie.respawn();
+            },
+            
+            cookieDuration: function(duration) {
+                test = setTimeout(function() {
+                        return cookie.respawn();
+                    }, duration);
+            },
+
+            respawn: function() {
+                clearTimeout(test);
+                this.cookieType = cookieTypes.regular;
+                this.lastCookieSide = this.currentCookieSide;
+                
+                if (score > 0 && score % 3 == 0 && Math.random() > 0.7) {
+                    this.cookieType = cookieTypes.invincible;
+                    this.cookieDuration(3000);
+                    
+                }
+                if (score > 0 && score % 5 == 0 && Math.random() < 0.3) {
+                    this.cookieType = cookieTypes.gravity;
+                    this.cookieDuration(3000);
+                }
+
+                this.x = cookieXPos();
+                this.y = cookieYPos();
+                
+                this.eaten = 0;
+            },
+            wobble: function() {
+                this.y += 3*Math.cos(frames/10);
+            }
+        },
+
+        // Ball object
+        ball = {
+            x: 200,
+            y: -10,
+            g: 0.05,
+            vx: 0,
+            vy: -7,
+            rotation: 0,
+            mass: 0.1,
+            
+            radius: 0,
+            xCenter: 0, 
+            yCenter: 0,
+
+            draw: function(ctx) {
+                ctx.save();
+                ctx.translate(this.x+spriteBall.width/2, this.y+spriteBall.height/2);
+                ctx.rotate(this.rotation);
+                ctx.translate(-(this.x+spriteBall.width/2), -(this.y+spriteBall.height/2));
+                this.rotation += 0.1;
+                spriteBall.draw(ctx, this.x, this.y);
+                ctx.restore();
+            },
+            
+            update: function() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += this.g;
+                this.xCenter = this.x + this.radius;
+                this.yCenter = this.y + this.radius;
+                
+                if (this.y > height && bird.dead == false) {
+                    this.respawn();
+                }
+                if (this.y < 0 && bird.dead == false) {
+                    this.respawn();
+                }
+            },
+
+            rebound: function() {
+                    this.vx += bird.vx;
+                    this.vy += bird.vx;
+                    bird.vx *= -1;
+                    bird.vy *= -0.9;
+                    birdSound.currentTime = 0;
+                    birdSound.play();
+            },
+
+            respawn: function() {
+                this.vx = 0;
+                this.vy = 5;
+                this.x = cookieXPos();
+                this.y = 0;
+            }
+        },
+
+        points = {
+            draw: function(ctx) {
+                ctx.save();
+                ctx.font = "bold 200px calibri";
+                ctx.fillStyle = "#fff";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(score, width/2, height/2);
+                ctx.restore();
+            }
+        },
+
+        splashScreen = {
+            x: 0,
+            y: 0,
+
+            draw: function(ctx){
+                ctx.save();
+                ctx.font = "28px Calibri";
+                ctx.fillStyle = "#fff";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("Naciskaj, aby skakać!", width/2, height/2 + 60);
+                ctx.restore();
+                spriteLogo.draw(ctx, spriteLogo.width/5, spriteLogo.height);
+                spriteFinger.draw(ctx, this.x-spriteFinger.width*0.5, this.y+spriteFinger.height);
+                this.wobble();
+            },
+            wobble: function() {
+                this.y += Math.cos(frames/5);
+            }
+        },
+
+        scoreboard = {
+            rotation: 1,
+            x: 0,
+            y: 0,
+
+            lex: function() {
+                if (score > 1 && score < 5) {
+                    return " ciastka ";
+                } else if (score == 1) {
+                    return " ciastko ";
+                } else {
+                    return " ciastek "
+                }
+            },
+
+            draw: function(ctx){
+
+                ctx.save();
+
+                ctx.translate(this.x + spriteRestart.width / 2, this.y + spriteRestart.height / 2);
+                ctx.rotate(this.rotation);
+                ctx.translate(-(this.x + spriteRestart.width / 2), -(this.y + spriteRestart.height / 2));
+
+                this.rotation = Math.cos(frames/15);
+
+                spriteRestart.draw(ctx, this.x, this.y);
+
+                ctx.restore();
+
+                ctx.save();
+
+                ctx.font = "26px Calibri";
+                ctx.fillStyle = "#fff";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("Zjadłeś " + score + this.lex(), width/2, height/2 - 80);
+                ctx.fillText("Rekord to " + bestScore + " ciastek", width/2, height/2 + 60);
+
+                ctx.restore();
+            }
+        };
+
+        //--------------------------------------------------------
+        //    HELPER FUNCTIONS
+        //--------------------------------------------------------
+
+        //returns random RGB color in hex
+        function getRandomColor() {
+            var letters = '0123456789ABCD'.split('');
+            var color = '#';
+            for (var i = 0; i < 6; i++ ) {
+                color += letters[Math.floor(Math.random() * 16)];
+            }
+            return color;
+        }
+        
+        function prepareCookiePos() {
+            var cookieDistance = height * 0.2;
+            var cookiePos = 0;
+            for (var i = 1; i <= 4; i++) {
+                cookie.cookiePositions.push(cookiePos + cookieDistance);
+                cookiePos += cookieDistance;
+            }
+        }
+        function cookieXPos() {
+             if (Math.random() > 0.5) {
+                 cookie.currentCookieSide = 0;
+                 return 50;
+             } else {
+                 cookie.currentCookieSide = 1;
+                 return (width - 85);
+             }
+        }
+
+         function cookieYPos() {
+             var position = Math.floor((Math.random() * (cookie.cookiePositions.length))); // get random value between 0 and number of items in the array
+             if(cookie.cookiePositions[position] == cookie.lastCookiePos && cookie.lastCookieSide == cookie.currentCookieSide) { 
+                 return cookieYPos(); // make sure that the cookie doesn't spawn in the same place twice consequently
+             } else {
+             cookie.lastCookiePos = cookie.cookiePositions[position]; // get y position from array
+             return cookie.cookiePositions[position];
+             }
+             
+         }
+
+        function onpress(e) {
+            if (event == "mousedown") {
+                mx = e.clientX - canvas.offsetLeft;
+                my = e.clientY - canvas.offsetTop;
+            } else {
+                mx = e.targetTouches[0].pageX - canvas.offsetLeft;
+                my = e.targetTouches[0].pageY - canvas.offsetTop;               
+            }
+            
+            switch (currentGameState) {
+                case gameStates.Splash:
+                    currentGameState = gameStates.Game;
+                    ball.respawn();
+                    cookie.respawn();
+                    bird.respawn();
+                    bird.flypUp();
+                    break;
+
+                case gameStates.Game:
+                    bird.flypUp();
+                    break;
+
+                case gameStates.Score:
+                    // check if within
+                    if (scoreboard.x < mx &&
+                        scoreboard.y < my &&
+                        mx < (scoreboard.x + spriteRestart.width) &&
+                        my < (scoreboard.y + spriteRestart.height)) {
+                            currentGameState = gameStates.Splash;
+                            bird.respawn();
+                            score = 0;
+                    }
+                    break;
+            }
+        }
+
+        //--------------------------------------------------------
+        //    Main function
+        //--------------------------------------------------------
+
+        function main() {
+            canvas = document.createElement("canvas");
+
+            width = window.innerWidth;
+            height = window.innerHeight;
+
+            var isTouchSupported = 'ontouchstart' in window;
+            event = isTouchSupported ? 'touchstart' : 'mousedown';
+
+            if (width >= 400) {
+                width = 400;
+                height = 640;
+                canvas.style.border = "1px solid #000";
+            }
+            console.log(event);
+            //listen for input
+            document.addEventListener(event, onpress);
+
+            canvas.width = width;
+            canvas.height = height;
+
+            if (!(!!canvas.getContext && canvas.getContext("2d"))) {
+                alert("Twoja przeglądarka nie wspiera HTML5, prosimy zaktualizuj ją do nowszej wersji, jeżeli chcesz zagrać w nasza grę.");
+            }
+
+            ctx = canvas.getContext("2d");
+            
+            currentGameState = 0;
+
+            document.body.appendChild(canvas);
+                        
+            var img = new Image();
+            img.onload = function() {
+                initSprites(this);
+                
+                ctx.fillStyle = spriteBackground.color;
+                
+                prepareCookiePos();
+                bird.radius = spriteBird[0].width / 2;               
+                bird.x = width * 0.5 - spriteBird[0].width * 0.5;
+                bird.y = height * 0.5 - spriteBird[0].height * 0.5;
+                ball.radius = spriteBall.width / 2;
+                splashScreen.x = width / 2;
+                splashScreen.y = height / 2;
+                scoreboard.x = width / 2;
+                scoreboard.y = height / 2;
+                run();
+            }
+            
+            birdSound = new Audio(sounds.bird); //initialize audio object
+            popSound = new Audio(sounds.pop); //initialize audio object
+            deadSound = new Audio(sounds.dead); //initialize audio object
+            eatSound = new Audio(sounds.eatCookie); //initialize audio object
+            boostSound = new Audio(sounds.boost); //initialize audio object
+            gravitySound = new Audio(sounds.gravity); //initialize audio object
+
+            img.src = "resources/sprites_sm.png";
+
+            //add mute button later
+            // birdSound.muted = true;
+            // popSound.muted = true;
+            // deadSound.muted = true;
+            // eatSound.muted = true;
+        }
+
+        function render() {
+            ctx.fillRect(0, 0, width, height);
+            if (currentGameState === gameStates.Game) {
+                points.draw(ctx);
+                cookie.draw(ctx);
+            }
+            
+            bird.draw(ctx);
+
+            if (currentGameState !== gameStates.Splash) {
+                ball.draw(ctx);
+            }
+
+            spike.draw(ctx);
+
+            if (currentGameState === gameStates.Splash) {
+                ctx.fillStyle = "#27ae60";
+                splashScreen.draw(ctx);
+            }
+
+            if (currentGameState === gameStates.Score) {
+                ctx.fillStyle = "#27ae60";
+                scoreboard.draw(ctx);
+            }
+        }
+
+        //update game actor positions
+        function update() {
+            frames++;
+
+            if (currentGameState === gameStates.Splash) splashScreen.wobble();
+            if (currentGameState !== gameStates.Splash) {
+                ball.update();
+                bird.update();
+                bird.hitBall();
+            }
+            
+            if (currentGameState === gameStates.Score) {
+                bestScore = Math.max(bestScore, score);
+                localStorage.setItem("best", bestScore);
+            }
+
+            cookie.wobble();
+            
+            if (!bird.dead) bird.eat();
+
+            //background colors for scores
+            if (score >9 && score < 20) {
+                ctx.fillStyle = "#4183D7";
+            } else if (score > 19 && score < 30) {
+                ctx.fillStyle = "#81CFE0";
+            } else if (score > 29 && score < 40) {
+                ctx.fillStyle = "#6C7A89";
+            } else if (score > 39 && score < 50) {
+                    ctx.fillStyle = "#F9BF3B";
+            } else if (score > 49 && score < 60) {
+                    ctx.fillStyle = "#3498DB";
+            } else if (score > 59 && score < 70) {
+                    ctx.fillStyle = "#ABB7B7";
+            } else if (score > 69 && score < 80) {
+                    ctx.fillStyle = "#2574A9";
+            } else if (score > 79 && score < 90) {
+                    ctx.fillStyle = "#03C9A9";
+            } else if (score > 89 && score < 100) {
+                    ctx.fillStyle = "#F4D03F";
+            }
+        }
+        
+        //run loop
+        function run() {
+            var loop = function() {
+                render();
+                update();
+                window.requestAnimationFrame(loop, canvas);
+            }
+            window.requestAnimationFrame(loop, canvas);
+        }
+
+        //start the game
+        document.ondomcontentready = main();
+        
+    })();
+    </script>
+
+</body>
+</html>
