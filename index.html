@@ -12,9 +12,15 @@
     <main class="game" aria-label="Ciastkobranie">
         <div class="toolbar">
             <span>Ciastkobranie</span>
+            <button id="open-courses" type="button">Trasy</button>
             <button id="open-nest" type="button">Gniazdo</button>
             <button id="mute" type="button" aria-pressed="false">Wycisz</button>
         </div>
+        <section id="hud" style="visibility:hidden" aria-hidden="true" aria-label="Stan lotu">
+            <div class="hud-top"><strong id="hud-score">0</strong><span id="hud-course"></span><span id="hud-percent">0%</span></div>
+            <div class="progress-track" aria-label="Postęp trasy"><i id="hud-progress"></i><b id="hud-best" title="Najlepszy postęp"></b></div>
+            <div class="hud-bottom"><span id="hud-energy-label"></span><span class="energy-track"><i id="hud-energy"></i></span><span id="hud-combo"></span><span id="hud-traits"></span><span id="hud-feather" title="Ostatnie pióro"><svg viewBox="0 0 16 24" aria-hidden="true"><path d="M4 19C-2 9 6-2 13 1c6 4-1 17-7 18L3 23l-1-1 9-17-7 14Z" fill="currentColor"/></svg></span><span id="hud-powers"></span></div>
+        </section>
         <div class="arena">
             <canvas width="400" height="640" tabindex="0" aria-label="Pole gry. Kliknij, dotknij lub naciśnij spację, aby skoczyć."></canvas>
             <section class="overlay" id="result" hidden aria-label="Wynik rundy">
@@ -26,9 +32,16 @@
                 <p id="highlight" hidden></p>
                 <p id="earned"></p>
                 <p id="unlock-progress" hidden></p>
-                <button id="restart" type="button">Zagraj ponownie</button>
-                <button id="result-nest" type="button" class="secondary">Rozwiń Gniazdo</button>
+                <button id="next-course" type="button" hidden>Następna trasa</button>
+                <button id="restart" type="button">Jeszcze raz</button>
+                <button id="practice" type="button" class="secondary">Trening fragmentu</button>
+                <button id="result-nest" type="button" hidden class="secondary">Rozwiń Gniazdo</button>
                 <small>lub naciśnij spację</small>
+            </section>
+            <section class="overlay menu-panel" id="courses" hidden role="dialog" aria-modal="true" aria-labelledby="courses-title">
+                <button id="close-courses" class="close-panel" type="button" aria-label="Zamknij wybór trasy">×</button>
+                <h1 id="courses-title">Wybierz trasę</h1><p class="menu-intro">Poznaj rytm. Znajdź własne połączenia.</p>
+                <div id="course-items"></div><button id="new-marathon" type="button" class="secondary" hidden>Nowy układ Maratonu</button>
             </section>
             <section class="overlay menu-panel" id="nest" hidden role="dialog" aria-modal="true" aria-labelledby="nest-title">
                 <button id="close-nest" type="button" aria-label="Wróć do gry">×</button>
@@ -39,7 +52,7 @@
                 <p class="style-label">Zdolność na tę rundę</p>
                 <div id="run-styles" role="group" aria-label="Styl rundy"></div>
                 <p id="style-description" class="menu-intro"></p>
-                <p class="menu-intro">Ciastko +1 energii · bliski unik +2 · rozbicie +1.<br>Pełny pasek: 4 s zdolności, potem 8 s przerwy.</p>
+                <p class="menu-intro">Ciastko +1 energii · bliski unik +2 · rozbicie +1.<br>Pełny pasek + kolejne ciastko: zdolność. Potem 8 s przerwy.</p>
                 <p class="style-label">Wygląd ptaka</p>
                 <div id="bird-looks" role="group" aria-label="Wygląd ptaka"></div>
                 <details><summary>Symbole i składanie zestawu</summary><p class="menu-intro">Leć przez romb, żeby wybrać cechę. Drugą opcję możesz ominąć. Moce w okrągłych ikonach działają chwilowo.</p><div id="trait-guide"></div></details>
@@ -48,7 +61,7 @@
                 <div id="nest-items"></div>
                 <p id="nest-unlocks"></p>
             </section>
-            <button id="skip-death" type="button" hidden>Pomiń · spacja / klik</button>
+            <button id="skip-death" type="button" hidden>Jeszcze raz · spacja / klik</button>
             <section class="overlay" id="pause" hidden aria-label="Pauza">
                 <h1>Pauza</h1>
                 <button id="resume" type="button">Wróć do gry</button>

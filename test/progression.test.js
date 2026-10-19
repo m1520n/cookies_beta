@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ProfileStore, PROFILE_KEY, cleanProfile, unlockedCards, unlockedLooks } from '../progression.js';
+import { ProfileStore, PROFILE_KEY, cleanProfile, unlockedCards, unlockedLooks, unlockedCourses } from '../progression.js';
 const memory = () => { const data = new Map(); return { data, getItem:key=>data.get(key)??null, setItem:(key,value)=>data.set(key,value) }; };
 const run = (id, collected=8, completedSectors=1, bonuses=2) => ({id,collected,completedSectors,bonuses,level:completedSectors+1});
 
@@ -69,4 +69,36 @@ test('blocked storage retains a victory and cosmetics during the session',()=>{
     const store=new ProfileStore({getItem(){throw Error();},setItem(){throw Error();}});
     store.recordVictory('a');assert.equal(store.setLook('gold'),true);assert.equal(store.recordVictory('a'),false);assert.equal(store.value.wins,1);
     assert.equal(cleanProfile({wins:'yes',look:'gold'}).look,'classic');
+});
+
+
+test('course unlocks distinguish legacy winners from new wins and persist records per style',()=>{
+    assert.deepEqual(unlockedCourses(cleanProfile({wins:1})),['press','ricochet','mechanism','marathon']);
+    const storage=memory(),store=new ProfileStore(storage);
+    assert.equal(store.setCourse('mechanism'),false);
+    store.recordVictory('first','press');
+    assert.deepEqual(unlockedCourses(new ProfileStore(storage).value),['press','ricochet','marathon']);
+    assert.equal(store.setCourse('ricochet'),true);
+    store.settle({...run('a'),mode:'press',style:'time',progress:.8,score:15});
+    store.settle({...run('b'),mode:'press',style:'time',progress:.3,score:20});
+    store.settle({...run('practice'),practice:true,mode:'press',style:'guard',progress:1});
+    const saved=new ProfileStore(storage).value;
+    assert.deepEqual(saved.records['press:time'],{progress:.8,score:20});
+    assert.deepEqual(saved.records['press:guard'],{progress:0,score:0});
+    assert.equal(saved.runs,2);assert.equal(saved.selectedCourse,'ricochet');
+});
+test('course cosmetics require a real clear, funds and one purchase without affecting upgrades',()=>{
+    const storage=memory(),store=new ProfileStore(storage);
+    store.settle(run('funds',500,0));assert.equal(store.purchaseLook('copper'),false);
+    store.recordVictory('win','press');assert.equal(store.purchaseLook('cobalt'),false);
+    assert.equal(store.purchaseLook('copper'),true);assert.equal(store.purchaseLook('copper'),false);
+    assert.equal(store.value.crumbs,400);assert.equal(store.setLook('copper'),true);
+    const saved=new ProfileStore(storage).value;
+    assert.equal(saved.look,'copper');assert.deepEqual(saved.upgrades,{grip:0,duration:0,start:0});
+});
+
+test('legacy high score imports once and later short-course scores cannot inflate marathon history',()=>{
+    const storage=memory(),store=new ProfileStore(storage);store.adoptLegacyBest(237);
+    const reload=new ProfileStore(storage);reload.adoptLegacyBest(999);
+    assert.equal(reload.value.legacyBest,237);
 });

@@ -1,5 +1,8 @@
 import { Game, WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from './game-model.js';
-import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, nextUnlock } from './progression.js';
+import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock } from './progression.js';
+
+import {COURSES,sectorDuration} from './courses.js';
+import {OBSTACLES,obstacleAt} from './obstacles.js';
 
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d', { alpha: false });
@@ -12,6 +15,11 @@ const resumeButton = document.querySelector('#resume');
 const announcement = document.querySelector('#announcement');
 const nestPanel = document.querySelector('#nest');
 const skipButton = document.querySelector('#skip-death');
+const coursesPanel=document.querySelector('#courses');
+const practiceButton=document.querySelector('#practice');
+const nextCourseButton=document.querySelector('#next-course');
+const uiValues=new Map(),birdCache=new Map(),obstacleCache=new Map();
+function uiText(id,value){if(uiValues.get(id)!==value){document.querySelector(id).textContent=value;uiValues.set(id,value);}}
 let storage;
 try { storage = localStorage; } catch { /* Session profile remains available. */ }
 const profileStore = new ProfileStore(storage);
@@ -24,7 +32,7 @@ const debugCollisions = window.location?.search?.includes('debug=1') || false;
 const seedMatch = window.location?.search?.match(/[?&]seed=(\d+)/);
 const perfEnabled = window.location?.search?.includes('perf=1');
 let perfStart = 0, perfFrames = 0, perfCost = 0, perfGap = 0, perfLast = 0;
-let rasterRatio = 1, backgroundCache, previousBackgroundCache, edgeCache, hudCache, backgroundKey = -1, hudKey = null;
+let rasterRatio = 1, backgroundCache, previousBackgroundCache, edgeCache, backgroundKey = -1;
 const glowCache = new Map();
 const typeface = '"Avenir Next", "Trebuchet MS", sans-serif';
 const paths = {
@@ -46,6 +54,7 @@ function storedScore(key) {
 }
 const best = Math.max(storedScore('bestScore'), storedScore('best'));
 write('bestScore', best);
+profileStore.adoptLegacyBest(best);
 let muted = read('muted') === 'true';
 let loaded = false;
 let previousTime = null;
@@ -69,6 +78,7 @@ motionPreference?.addEventListener('change', resetFeedback);
 function addFeedback(event) {
     if (event.type === 'offer') { announcement.textContent = 'Wybierz jedną z dwóch cech, przelatując przez jej symbol.'; return; }
     if (event.type === 'finalPhase') return;
+    if(event.type==='pocket'){announcement.textContent='Kieszeń podtrzymuje serię.';return;}
     if (event.type === 'near' || event.type === 'ability') {
         if (!motionPreference?.matches) {
             feedback.rings.push({x:event.x ?? game.bird.x+28,y:event.y ?? game.bird.y+29,remaining:.5,color:event.color,large:event.type==='ability'});
@@ -78,8 +88,8 @@ function addFeedback(event) {
         return;
     }
     if (event.type === 'victory' || event.type === 'finale') {
-        feedback.banner = {title:event.type === 'victory' ? 'UDAŁO SIĘ! · LEĆ DALEJ' : 'FINAŁ',color:'#ffd78f',remaining:1.2,notice:true,priority:2};
-        announcement.textContent = event.type === 'victory' ? 'Zwycięstwo! Złoty wygląd odblokowany. Możesz lecieć dalej.' : 'Finał. Przetrwaj trzy sekwencje.';
+        feedback.banner = {title:event.type === 'victory' ? (game.practice ? 'FRAGMENT OPANOWANY' : game.course.id==='marathon' ? 'UDAŁO SIĘ! · LEĆ DALEJ' : 'TRASA UKOŃCZONA') : 'FINAŁ',color:'#ffd78f',remaining:1.2,notice:true,priority:2};
+        announcement.textContent = event.type === 'victory' ? (game.practice ? 'Fragment opanowany. Trening bez nagród.' : game.course.id === 'marathon' ? 'Finał ukończony. Leć dalej po rekord.' : 'Trasa ukończona. Następna trasa odblokowana.') : 'Finał. Przetrwaj trzy sekwencje.';
         if (!motionPreference?.matches) arcadeImpact(4,'#ffd78f');
         return;
     }
@@ -99,14 +109,14 @@ function addFeedback(event) {
     }
     if (event.type === 'shatter') {
         if (motionPreference?.matches) return;
-        arcadeImpact(9, event.color);
+        arcadeImpact(5, event.color, .12);
         feedback.rings.push({x: event.x, y: event.y, remaining: .5, color: event.color, large: true});
         for (let i = 0; i < 10; i++) {
             const angle = i * Math.PI * 2 / 10;
             feedback.particles.push({x:event.x + Math.cos(angle) * 8, y:event.y + Math.sin(angle) * 8,
                 vx:Math.cos(angle) * (150 + Math.random() * 100), vy:Math.sin(angle) * 200 - 70,
                 size: 7 + Math.random() * 5, angle, spin:(Math.random() - .5) * 15,
-                remaining:.65 + Math.random() * .2, color:i % 2 ? '#ec994c' : '#ffbd75', fragment:true});
+                remaining:.65 + Math.random() * .2, color:i % 2 ? (OBSTACLES[event.kind]?.color || '#ec994c') : '#e6eef7', fragment:true});
         }
         feedback.particles = feedback.particles.slice(-100);
         return;
@@ -163,9 +173,10 @@ function addFeedback(event) {
     feedback.particles = feedback.particles.slice(-100);
 }
 
-function arcadeImpact(strength, color) {
-    feedback.strength = Math.min(16, Math.max(feedback.strength * feedback.shake / .42, strength));
-    feedback.shake = .42;
+function arcadeImpact(strength, color, duration=.22) {
+    feedback.strength = Math.min(16, Math.max(feedback.strength * feedback.shake / (feedback.shakeMax || .22), strength));
+    feedback.shake = duration;
+    feedback.shakeMax=duration;
     feedback.flash = .16;
     feedback.flashColor = color;
 }
@@ -238,6 +249,7 @@ function play(name) {
 }
 // Short, bounded synthesized voices: no downloads or per-frame audio allocation.
 const arcadeVoices = new Set();
+const musicVoices=new Set();let nextMusicBeat=null,lastMusicScale=1;
 let shieldHum = null;
 function tone(frequency, endFrequency, duration, volume = .06, type = 'triangle', delay = 0) {
     if (muted || audioContext?.state !== 'running') return;
@@ -251,15 +263,19 @@ function tone(frequency, endFrequency, duration, volume = .06, type = 'triangle'
     gain.gain.exponentialRampToValueAtTime(volume, now + .008);
     gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
     oscillator.connect(gain); gain.connect(audioContext.destination);
-    const voice = { stop() { try { oscillator.stop(); } catch {} arcadeVoices.delete(voice); oscillator.disconnect(); gain.disconnect(); } };
+    const voice = { stop() { try { oscillator.stop(); } catch {} arcadeVoices.delete(voice); musicVoices.delete(voice); oscillator.disconnect(); gain.disconnect(); } };
     oscillator.onended = () => voice.stop(); arcadeVoices.add(voice);
     oscillator.start(now); oscillator.stop(now + duration + .02);
+    return voice;
 }
 function playArcade(name) {
-    if (name === 'shatter') {
-        tone(150, 42, .24, .10, 'triangle');
+    if (name.startsWith('shatter')) {
+        const base=name.endsWith('ricochet')?380:name.endsWith('pendulum')?620:150;
+        tone(base, name.endsWith('heavy')?42:base/2, .20, .08, 'triangle');
         tone(1100, 110, .10, .025, 'sawtooth');
         tone(1800, 350, .07, .018, 'square', .025);
+    } else if (name.startsWith('warning-')) {
+        const note={heavy:180,ricochet:440,pendulum:660}[name.slice(8)];if(note)tone(note,note,.12,.018,'sine');
     } else if (name === 'feather') {
         tone(220, 880, .45, .07);
         for (let i = 0; i < 3; i++) tone(660 * 2 ** (i / 3), 880 * 2 ** (i / 3), .24, .035, 'sine', i * .09);
@@ -270,6 +286,19 @@ function playArcade(name) {
     else if (name.startsWith('combo')) {
         const rank = Number(name.slice(5)) || 2;
         for (let i = 0; i < 3; i++) tone(220 * rank * 2 ** (i / 4), 220 * rank * 2 ** (i / 4), .16, .035, 'triangle', i * .065);
+    }
+}
+function syncMusic(){
+    if(muted||game.paused||game.state!=='playing'||audioContext?.state!=='running'){nextMusicBeat=null;return;}
+    const scale=game.slowed ? .5 : 1;
+    if(scale!==lastMusicScale){for(const voice of [...musicVoices])voice.stop();nextMusicBeat=null;lastMusicScale=scale;}
+    nextMusicBeat??=Math.ceil(game.courseTime*2);
+    while(nextMusicBeat/2<=game.courseTime+.12*scale){
+        const beat=nextMusicBeat++,delay=Math.max(0,(beat/2-game.courseTime)/scale);
+        const note=(frequency,end,duration,volume,type)=>{const voice=tone(frequency,end,duration,volume,type,delay);if(voice)musicVoices.add(voice);};
+        if(beat%2===0)note(75,35,.12,.018,'sine');
+        if(beat%4===0){const bass=[110,110,146.83,130.81][Math.floor(beat/8)%4];note(bass,bass,.3,.012,'triangle');}
+        if(beat%2===1)note(2400,500,.035,.004,'sine');
     }
 }
 function syncShieldHum() {
@@ -283,6 +312,7 @@ function syncShieldHum() {
     }
 }
 function stopArcade() {
+    nextMusicBeat=null;
     for (const voice of [...arcadeVoices]) voice.stop();
     if (shieldHum) { shieldHum.stop(); shieldHum = null; }
 }
@@ -297,7 +327,7 @@ const game = new Game({
     profile: profileStore.value,
     onSound: play,
     onFeedback: addFeedback,
-    onVictory(id) { profileStore.recordVictory(id); },
+    onVictory(id,mode) { profileStore.recordVictory(id,mode); },
     onSettle(snapshot) {
         settlement = profileStore.settle(snapshot);
         write('bestScore', game.best);
@@ -305,52 +335,54 @@ const game = new Game({
     onFinish(score, record) {
         resultSince = performance.now();
         write('bestScore', record);
-        document.querySelector('#result-title').textContent = game.won ? 'Zwycięstwo!' : 'Koniec rundy!';
-        document.querySelector('#score').textContent = `Wynik: ${score} pkt`;
-        document.querySelector('#best').textContent = `Rekord: ${record} pkt`;
-        document.querySelector('#run-detail').textContent = `Sektor ${game.level}`;
-        document.querySelector('#earned').textContent = `+${settlement?.crumbs || 0} okruchów`;
-        for (const id of ['#next-goal', '#highlight', '#unlock-progress']) document.querySelector(id).hidden = true;
-        announcement.textContent = `${game.won ? 'Zwycięstwo.' : 'Koniec rundy.'} Wynik: ${score}. Rekord: ${record}.`;
+        const recordNow=profileStore.value.records[`${game.course.id}:${game.profile.runStyle}`];
+        const marathon=game.course.id==='marathon';
+        document.querySelector('#result-title').textContent=game.practice ? (game.won?'Fragment opanowany':'Trening') : game.won?'Trasa ukończona!':'Jeszcze jedna próba?';
+        const progress=runProgress();
+        document.querySelector('#score').textContent=game.practice ? `${Math.floor(progress*100+1e-5)}% fragmentu` : marathon ? `${score} pkt` : `${Math.floor(progress*100+1e-5)}% trasy`;
+        document.querySelector('#best').textContent=game.practice ? 'Trening bez nagród' : marathon ? `Rekord: ${Math.max(recordNow.score,profileStore.value.legacyBest)} pkt` : `Rekord: ${Math.floor(recordNow.progress*100+1e-5)}%`;
+        document.querySelector('#run-detail').textContent=game.course.name;
+        document.querySelector('#earned').textContent=game.practice?'':`+${settlement?.crumbs||0} okruchów`;
+        practiceButton.disabled=!game.checkpoint;practiceButton.hidden=game.won&&!game.practice;
+        practiceButton.textContent=game.practice?'Powtórz fragment':'Trening fragmentu';
+        restartButton.textContent=game.practice?'Normalna próba':'Jeszcze raz';
+        const next=COURSES[COURSES.findIndex(course=>course.id===game.course.id)+1];
+        nextCourseButton.hidden=game.practice||!game.won||marathon||!next||!unlockedCourses(profileStore.value).includes(next.id);
+        restartButton.setAttribute('class',nextCourseButton.hidden?'':'secondary');
+        for(const id of ['#next-goal','#highlight','#unlock-progress','#result-nest'])document.querySelector(id).hidden=true;
+        announcement.textContent=`${game.practice?'Trening.':game.won?'Zwycięstwo.':'Koniec rundy.'} Postęp ${Math.floor(progress*100)} procent.`;
         syncPanels();
         restartButton.focus({ preventScroll: true });
     },
 });
 
-function syncPanels() {
-    const panelKey = `${game.state}:${game.paused}:${game.deathElapsed >= .35}`;
-    if (lastPanelState === panelKey) return;
-    lastPanelState = panelKey;
-    skipButton.hidden = game.state !== 'dying' || game.paused || game.deathElapsed < .35;
-    skipButton.disabled = game.deathElapsed < .35;
-    document.querySelector('#open-nest').disabled = !['ready', 'over'].includes(game.state);
-    result.hidden = game.state !== 'over';
-    pausePanel.hidden = !game.paused;
+function syncPanels(){
+    const panelKey=`${game.state}:${game.paused}:${game.deathElapsed>=.12}`;
+    if(lastPanelState===panelKey)return;lastPanelState=panelKey;
+    skipButton.hidden=!['dying','celebrating'].includes(game.state)||game.paused||game.deathElapsed<.12;
+    skipButton.disabled=game.deathElapsed<.12;
+    document.querySelector('#open-nest').disabled=!['ready','over'].includes(game.state);
+    document.querySelector('#open-courses').disabled=!['ready','over'].includes(game.state);
+    document.querySelector('#open-courses').textContent=game.course.name;
+    result.hidden=game.state!=='over'||!nestPanel.hidden||!coursesPanel.hidden;pausePanel.hidden=!game.paused;
+    const hudVisible=['playing','dying','celebrating'].includes(game.state);document.querySelector('#hud').style.setProperty('visibility',hudVisible?'visible':'hidden');document.querySelector('#hud').setAttribute('aria-hidden',String(!hudVisible));
 }
-function jump() {
-    if (!loaded || game.paused || !nestPanel.hidden) return;
-    if (game.state === 'dying') { game.skipDeath(); syncPanels(); return; }
-    if (game.state === 'over' && performance.now() - resultSince < 200) return;
-    try {
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        if (AudioContext && !audioContext) audioContext = new AudioContext();
-        audioContext?.resume()?.catch(() => {});
-    } catch { /* HTML audio and silent play remain available. */ }
-    if (game.state !== 'playing') {
-        game.profile = profileStore.reload();
-        settlement = null;
-        backgroundCache = null; previousBackgroundCache = null; backgroundKey = -1; hudKey = null;
-        stopSounds();
-        accumulator = 0;
-        previousTime = null;
-        announcement.textContent = '';
-        resetFeedback();
+function clearRunView(){
+    settlement=null;backgroundCache=null;previousBackgroundCache=null;backgroundKey=-1;
+    stopSounds();accumulator=0;previousTime=null;announcement.textContent='';resetFeedback();uiValues.clear();
+}
+function jump(){
+    if(!loaded||game.paused||!nestPanel.hidden||!coursesPanel.hidden)return;
+    if(['dying','celebrating'].includes(game.state)&&game.deathElapsed<.12)return;
+    try{const AudioContext=window.AudioContext||window.webkitAudioContext;if(AudioContext&&!audioContext)audioContext=new AudioContext();audioContext?.resume()?.catch(()=>{});}catch{}
+    if(game.state!=='playing'){
+        if(game.state!=='ready'&&!game.practice)profileStore.recordRetry(game.state==='over'?(performance.now()-resultSince)/1000:game.deathElapsed);
+        if(!game.practice)game.profile=profileStore.reload();clearRunView();
     }
-    game.press();
-    syncPanels();
+    game.press();syncPanels();
 }
 function setPaused(paused) {
-    if (!loaded || !['playing', 'dying'].includes(game.state)) return;
+    if (!loaded || !['playing', 'dying','celebrating'].includes(game.state)) return;
     game.paused = paused;
     accumulator = 0;
     previousTime = null;
@@ -366,11 +398,17 @@ muteButton.addEventListener('click', () => {
     write('muted', muted);
 });
 restartButton.addEventListener('click', () => {
+    if(game.practice){game.leavePractice();game.profile=profileStore.reload();}
     jump();
     canvas.focus({ preventScroll: true });
 });
 resumeButton.addEventListener('click', () => setPaused(false));
-skipButton.addEventListener('click', () => { game.skipDeath(); syncPanels(); });
+skipButton.addEventListener('click',jump);
+practiceButton.addEventListener('click',()=>{clearRunView();game.startPractice();lastPanelState='';syncPanels();canvas.focus();});
+nextCourseButton.addEventListener('click',()=>{const next=COURSES[COURSES.findIndex(course=>course.id===game.course.id)+1];if(next)selectCourse(next.id);});
+document.querySelector('#open-courses').addEventListener('click',openCourses);
+document.querySelector('#close-courses').addEventListener('click',closeCourses);
+document.querySelector('#new-marathon').addEventListener('click',()=>{game.fixedSeed=undefined;game.retrySeed=undefined;selectCourse('marathon');});
 document.querySelector('#open-nest').addEventListener('click', openNest);
 document.querySelector('#result-nest').addEventListener('click', openNest);
 document.querySelector('#close-nest').addEventListener('click', () => {
@@ -382,25 +420,26 @@ canvas.addEventListener('pointerdown', event => {
     if (!event.isPrimary || event.button !== 0) return;
     event.preventDefault();
     canvas.focus({ preventScroll: true });
-    if (game.state !== 'over') jump();
+    jump();
 });
 document.addEventListener('keydown', event => {
-    const activePanel = !nestPanel.hidden ? nestPanel : game.paused ? pausePanel : game.state === 'over' ? result : null;
+    const activePanel = !coursesPanel.hidden ? coursesPanel : !nestPanel.hidden ? nestPanel : game.paused ? pausePanel : game.state === 'over' ? result : null;
     if (event.code === 'Tab' && activePanel) {
         const buttons = [...activePanel.querySelectorAll('button:not([disabled])')];
         const first = buttons[0], last = buttons.at(-1);
         if (event.shiftKey && event.target === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && event.target === last) { event.preventDefault(); first?.focus(); }
     }
+    if(event.code==='Escape'&&!coursesPanel.hidden){closeCourses();return;}
     if (event.code === 'Escape' && !nestPanel.hidden) { document.querySelector('#close-nest').click(); return; }
-    if (event.code === 'Escape' && loaded && ['playing', 'dying'].includes(game.state)) {
+    if (event.code === 'Escape' && loaded && ['playing', 'dying','celebrating'].includes(game.state)) {
         event.preventDefault();
         if (!event.repeat) setPaused(!game.paused);
     }
     if (event.code !== 'Space') return;
     const button = event.target.closest('button');
     if (button && !['restart', 'resume', 'skip-death'].includes(button.id)) return;
-    if (event.target.closest('input, textarea, select, a')) return;
+    if (event.target.closest('input, textarea, select, a, summary')) return;
     event.preventDefault();
     if (event.repeat) return;
     if (game.paused) setPaused(false);
@@ -410,6 +449,24 @@ document.addEventListener('visibilitychange', () => {
     if (document.hidden) setPaused(true);
 });
 
+function selectCourse(id){
+    if(!profileStore.setCourse(id))return;
+    game.practice=false;game.practiceOrigin=null;game.profile=profileStore.value;game.modeOverride=undefined;game.retrySeed=undefined;game.reset();
+    clearRunView();coursesPanel.hidden=true;nestPanel.hidden=true;lastPanelState='';syncPanels();canvas.focus();
+}
+function closeCourses(){coursesPanel.hidden=true;lastPanelState='';syncPanels();if(game.state==='over')restartButton.focus();else canvas.focus();}
+function openCourses(){
+    if(!['ready','over'].includes(game.state))return;profileStore.reload();result.hidden=true;
+    const list=document.querySelector('#course-items');list.replaceChildren();
+    for(const course of COURSES){
+        const b=document.createElement('button');b.type='button';b.className='choice';b.disabled=!unlockedCourses(profileStore.value).includes(course.id);
+        const title=document.createElement('strong');title.textContent=`${course.name} · ${course.duration}s`;
+        const detail=document.createElement('span'),record=profileStore.value.records[`${course.id}:${profileStore.value.runStyle}`];
+        detail.textContent=b.disabled?`Ukończ ${course.id==='ricochet'?'Tłocznię':'Rykoszet'}`:course.id==='marathon'?`Finał i dalszy lot · rekord ${Math.max(record.score,profileStore.value.legacyBest)} pkt`:`Rekord ${Math.floor(record.progress*100)}%`;
+        b.setAttribute('aria-pressed',String(game.course.id===course.id));b.append(title,detail);b.addEventListener('click',()=>selectCourse(course.id));list.append(b);
+    }
+    document.querySelector('#new-marathon').hidden=game.course.id!=='marathon';coursesPanel.hidden=false;document.querySelector('#close-courses').focus();
+}
 function openNest() {
     if (!['ready', 'over'].includes(game.state)) return;
     profileStore.reload();
@@ -426,10 +483,12 @@ function openNest() {
     const looks = document.querySelector('#bird-looks'); looks.replaceChildren();
     for (const look of LOOKS) {
         const button = document.createElement('button'); button.type = 'button'; button.textContent = look.name;
-        button.disabled = !unlockedLooks(profileStore.value).includes(look.id);
-        button.title = look.id === 'gold' ? 'Pierwsze zwycięstwo' : look.id === 'mint' ? 'Seria 20 ciastek' : 'Podstawowy wygląd';
+        const owned=unlockedLooks(profileStore.value).includes(look.id);
+        if(look.cost&&!owned)button.textContent+=` · ${look.cost}`;
+        button.disabled=!owned&&(!look.cost||!profileStore.value.courseClears.includes(look.course)||profileStore.value.crumbs<look.cost);
+        button.title = look.cost ? `Ukończ ${COURSES.find(course=>course.id===look.course).name} · ${look.cost} okruchów` : look.id === 'gold' ? 'Pierwsze zwycięstwo' : look.id === 'mint' ? 'Seria 20 ciastek' : 'Podstawowy wygląd';
         button.setAttribute('aria-pressed', String(profileStore.value.look===look.id));
-        button.addEventListener('click',()=>{profileStore.setLook(look.id);openNest();});looks.append(button);
+        button.addEventListener('click',()=>{if(!owned)profileStore.purchaseLook(look.id);profileStore.setLook(look.id);birdCache.clear();openNest();});looks.append(button);
     }
     const guide = document.querySelector('#trait-guide'); guide.replaceChildren();
     for (const card of CARDS) {
@@ -440,7 +499,7 @@ function openNest() {
     const build = profileStore.value.lastBuild.map(item=>`${CARDS.find(card=>card.id===item.id)?.name} ${item.rank}`).join(' · ');
     document.querySelector('#last-build').textContent = build ? `Ostatni zestaw: ${build}` : 'Zestaw: wybierz symbole torem lotu. Maksymalnie 3 cechy, każda do poziomu 2.';
     const last = profileStore.value.lastRun;
-    document.querySelector('#last-metrics').textContent = last ? `${Math.floor(last.elapsed)} s lotu · ${last.metrics.nearMisses} uników · ${last.metrics.abilities} zdolności · ${Math.round(last.metrics.shieldSeconds)} s ochrony · ${Math.round(last.metrics.twoPowerSeconds)} s z dwiema mocami · ${last.metrics.rescues} ratunków · koniec: ${{ball:'piłka',floor:'dolne kolce',ceiling:'górne kolce'}[last.metrics.cause]}` : 'Rozegraj pierwszą rundę.';
+    document.querySelector('#last-metrics').textContent = last ? `${Math.floor(last.elapsed)} s lotu · ${last.metrics.nearMisses} uników · ${last.metrics.abilities} zdolności · ${Math.round(last.metrics.shieldSeconds)} s ochrony · ${Math.round(last.metrics.twoPowerSeconds)} s z dwiema mocami · ${last.metrics.rescues} ratunków · cechy ${last.metrics.offersTaken}/${last.metrics.offersSeen} · pierwsza cecha ${last.metrics.firstTraitAt?Math.round(last.metrics.firstTraitAt)+'s':'—'} · rewanż ${last.metrics.retrySeconds.toFixed(1)}s · koniec: ${{ball:'piłka',floor:'dolne kolce',ceiling:'górne kolce',complete:'ukończenie'}[last.metrics.cause]}` : 'Rozegraj pierwszą rundę.';
     const list = document.querySelector('#nest-items'); list.replaceChildren();
     for (const item of NEST_UPGRADES) {
         const rank = profileStore.value.upgrades[item.id];
@@ -462,7 +521,7 @@ function openNest() {
 
 function resize() {
     const ratio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-    rasterRatio = ratio; backgroundCache = null; previousBackgroundCache = null; edgeCache = null; hudCache = null; hudKey = null; glowCache.clear();
+    rasterRatio = ratio; backgroundCache = null; previousBackgroundCache = null; edgeCache = null; glowCache.clear();birdCache.clear();obstacleCache.clear();
     canvas.width = Math.round(WIDTH * ratio);
     canvas.height = Math.round(HEIGHT * ratio);
     ctx.setTransform(canvas.width / WIDTH, 0, 0, canvas.height / HEIGHT, 0, 0);
@@ -564,13 +623,14 @@ function drawBackground() {
         backgroundCache = layer(WIDTH, HEIGHT); backgroundKey = game.stageIndex;
         paintBackground(backgroundCache.context, game.stageIndex);
     }
-    const progress = Math.min(1, Math.max(0, (game.elapsed - game.stageIndex * 30) / 1.2));
+    const progress = Math.min(1, Math.max(0, (game.courseTime - game.stageIndex * sectorDuration(game.course)) / 1.2));
     if (previousBackgroundCache && progress < 1 && !motionPreference?.matches) {
         ctx.drawImage(previousBackgroundCache.image, 0, 0, WIDTH, HEIGHT);
         ctx.save(); ctx.globalAlpha = progress; ctx.drawImage(backgroundCache.image,0,0,WIDTH,HEIGHT);ctx.restore();
     } else { ctx.drawImage(backgroundCache.image, 0, 0, WIDTH, HEIGHT); previousBackgroundCache = null; }
 }
 function paintBackground(h, sector) {
+    sector+=game.course.id==='press'?0:game.course.id==='ricochet'?1:game.course.id==='mechanism'?2:0;
     const gradient = h.createLinearGradient(0, 0, WIDTH, HEIGHT);
     gradient.addColorStop(0, ['#1e3555', '#26375e', '#343053', '#3b2e4a', '#403444'][Math.min(4, sector)]);
     gradient.addColorStop(.5, '#172640');
@@ -625,51 +685,34 @@ function drawGlow(x, y, color, size = 80) {
     ctx.drawImage(glowCache.get(color), x - size / 2, y - size / 2, size, size);
 }
 
-function drawScore() {
-    const key = `${game.score}:${game.stageIndex}:${game.won}:${JSON.stringify(game.cards)}:${game.profile.runStyle}`;
-    if (!hudCache || key !== hudKey) {
-        hudCache = layer(WIDTH, 140); hudKey = key; paintScore(hudCache.context);
+function runProgress(){return game.practice?Math.max(0,Math.min(1,(game.courseTime-(game.practiceEnd-sectorDuration(game.course)))/sectorDuration(game.course))):game.progress;}
+function drawHud(){
+    const progress=runProgress();
+    const record=profileStore.value.records[`${game.course.id}:${game.profile.runStyle}`];
+    uiText('#hud-score',String(game.score));uiText('#hud-course',`${game.practice?'Trening · ':''}${game.course.name} · ${game.level}`);uiText('#hud-percent',`${Math.floor(progress*100+1e-5)}%`);
+    document.querySelector('#hud-progress').style.setProperty('transform',`scaleX(${progress})`);
+    document.querySelector('#hud-best').style.setProperty('--best',`${(game.practice?0:record.progress)*100}%`);
+    const active=game.abilityRemaining>0,cooling=game.abilityCooldown>0;
+    const fraction=active?game.abilityRemaining/game.abilityMax:cooling?game.abilityCooldown/8:game.energy/game.energyNeeded;
+    uiText('#hud-energy-label',active?`${game.style.symbol} ${Math.ceil(game.abilityRemaining)}s`:cooling?`◷ ${Math.ceil(game.abilityCooldown)}s`:game.abilityReady?'Zbierz ciastko':`${game.style.symbol} ${game.energy}/${game.energyNeeded}`);
+    document.querySelector('#hud-energy-label').style.setProperty('--tone',cooling?'#718aaa':game.style.color);
+    const energy=document.querySelector('#hud-energy');energy.style.setProperty('transform',`scaleX(${fraction})`);energy.style.setProperty('--tone',cooling?'#718aaa':game.style.color);
+    uiText('#hud-combo',game.chain>=3?`×${game.multiplier}`:'');
+    const traitKey=JSON.stringify(game.cards)+game.pocketReady;
+    if(uiValues.get('traits')!==traitKey){
+        const list=document.querySelector('#hud-traits');list.replaceChildren();
+        for(const [id,rank] of Object.entries(game.cards)){const card=CARDS.find(card=>card.id===id),span=document.createElement('span');span.textContent=`${card.symbol}${rank===2?'••':'•'}`;span.title=`${card.name} ${rank}/2${id==='pocket'?game.pocketReady?' · gotowa':' · odnawianie':''}`;span.style.setProperty('--tone',card.color);list.append(span);}
+        uiValues.set('traits',traitKey);
     }
-    ctx.drawImage(hudCache.image, 0, 0, WIDTH, 140);
-    ctx.fillStyle = '#ffd78f'; ctx.fillRect(126, 82, 244 * Math.min(1,(game.elapsed-game.stageIndex*30)/30), 3);
-    const active = game.abilityRemaining > 0;
-    const fraction = active ? game.abilityRemaining / game.abilityMax : game.abilityCooldown > 0 ? 1-game.abilityCooldown/8 : game.energy/game.energyNeeded;
-    ctx.fillStyle = active ? game.style.color : game.abilityCooldown > 0 ? '#718aaa' : game.style.color;
-    ctx.fillRect(126, 101, 244 * Math.max(0, Math.min(1, fraction)), 5);
-    text(game.style.symbol, 347, 66, 19, active ? game.style.color : '#718aaa', 800);
-}
-function paintScore(h) {
-    const label = (value, x, y, size, color, weight = 600) => {
-        h.font = `${weight} ${size}px ${typeface}`; h.textAlign = 'center'; h.textBaseline = 'middle';
-        h.fillStyle = color; h.fillText(value, x, y, WIDTH - 32);
-    };
-    h.save();
-    h.fillStyle = '#0b1429b3';
-    h.strokeStyle = '#a9c5e324';
-    h.lineWidth = 1;
-    h.beginPath();
-    h.roundRect(18, 46, 88, 72, 18);
-    h.fill();
-    h.stroke();
-    label('PUNKTY', 62, 63, 9, '#a4b5ce', 800);
-    label(String(game.score), 62, 92, game.score > 999 ? 27 : 34, '#ffd78f', 800);
-    label(game.elapsed >= 210 && !game.won ? 'FINAŁ' : `SEKTOR ${game.level}`, 224, 64, 12, '#f7f1df', 800);
-    h.fillStyle = '#a9c5e320'; h.fillRect(126,82,244,3);h.fillRect(126,101,244,5);
-    const entries = Object.entries(game.cards);
-    for (let i=0;i<3;i++) {
-        const x = 239 + i * 39;
-        h.strokeStyle = '#a9c5e330'; h.beginPath();h.roundRect(x-14,114,30,26,7);h.stroke();
-        if (entries[i]) {
-            const [id,rank] = entries[i], card = CARDS.find(card=>card.id===id);
-            label(card.symbol,x,125,16,card.color,800);label(rank===2 ? '••' : '•',x,136,8,card.color);
-        }
-    }
-    h.restore();
+    const feather=document.querySelector('#hud-feather');feather.hidden=!game.hasFeather;feather.setAttribute('data-used',String(game.featherUsed));feather.setAttribute('aria-label',game.featherUsed?'Pióro zużyte':'Ostatnie pióro dostępne');
+    const powerKey=Object.values(game.effects).map(Math.ceil).join(':');
+    if(uiValues.get('powers')!==powerKey){const powers=document.querySelector('#hud-powers');powers.replaceChildren();for(const p of Object.values(POWERUPS)){const remaining=game.effects[p.effect];if(remaining>0){const span=document.createElement('span');span.textContent=`${p.symbol}${Math.ceil(remaining)}s`;span.title=p.label;span.style.setProperty('--tone',remaining<=2?'#ffd18a':p.color);powers.append(span);}}uiValues.set('powers',powerKey);}
 }
 
 function drawCookie() {
     const cookie = game.cookie;
     const powerup = POWERUPS[cookie.type];
+    if(game.abilityReady){ctx.save();ctx.strokeStyle=game.style.color;ctx.lineWidth=3;ctx.beginPath();ctx.arc(cookie.x+15,cookie.y+10,25,0,Math.PI*2);ctx.stroke();ctx.restore();}
     if (!powerup) { spriteCookie[0].draw(ctx, cookie.x, cookie.y); return; }
     ctx.save();
     ctx.fillStyle = '#111e34';
@@ -702,36 +745,49 @@ function drawOffers() {
     }
 }
 
-function drawActiveBonuses() {
-    const active = Object.values(POWERUPS).filter(powerup => game.effects[powerup.effect] > 0);
-    const width = 88;
-    const start = (WIDTH - (active.length * (width + 6) - 6)) / 2;
-    active.forEach((powerup, index) => {
-        const remaining = game.effects[powerup.effect];
-        const duration = game.effectMax[powerup.effect];
-        const x = start + index * (width + 6);
-        const ending = remaining <= 2;
-        const color = ending ? '#ffd18a' : powerup.color;
-        ctx.save();
-        ctx.fillStyle = '#0b1429dd';
-        ctx.strokeStyle = color + '77';
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.roundRect(x, 566, width, 33, 10); ctx.fill(); ctx.stroke();
-        const label = powerup.effect === 'invincible' ? (ending ? 'Tarcza znika' : 'Tarcza')
-            : powerup.effect === 'slow' ? 'Wolniej' : powerup.effect === 'magnet' ? 'Magnes' : '×2';
-        text(`${label} ${Math.ceil(remaining)}s`, x + width / 2, 579, ending && powerup.effect === 'invincible' ? 9 : 11, color, 800);
-        ctx.fillStyle = color;
-        ctx.fillRect(x + 8, 591, (width - 16) * Math.min(1, remaining / (duration || powerup.duration)), 2);
-        ctx.restore();
-    });
-}
-
 function drawBanner() {
-    if (!feedback.banner || game.state !== 'playing') return;
+    if (!feedback.banner || !['playing','celebrating'].includes(game.state)) return;
     ctx.save();
     ctx.globalAlpha = Math.min(1, feedback.banner.remaining / .25);
-    text(feedback.banner.title, 200, 166, 12, feedback.banner.color, 800);
+    text(feedback.banner.title, 200, 59, 12, feedback.banner.color, 800);
     ctx.restore();
+}
+
+function birdSprite(frame){
+    const source=spriteBird[frame];const look=LOOKS.find(look=>look.id===(game.state==='ready'?profileStore.value.look:game.profile.look));
+    if(!look?.color)return source;const key=`${look.id}:${frame}`;
+    if(!birdCache.has(key)){
+        const cache=layer(source.width,source.height),h=cache.context;source.draw(h,0,0);
+        h.globalCompositeOperation='source-atop';h.globalAlpha=.43;h.fillStyle=look.color;h.fillRect(0,0,source.width,source.height);h.globalAlpha=1;h.globalCompositeOperation='source-over';
+        birdCache.set(key,{width:source.width,height:source.height,draw(c,x,y){c.drawImage(cache.image,x,y,source.width,source.height);}});
+    }return birdCache.get(key);
+}
+function machineSprite(kind){
+    if(!obstacleCache.has(kind)){
+        const cache=layer(46,44),h=cache.context,spec=OBSTACLES[kind];h.translate(23,22);
+        const gradient=h.createLinearGradient(-20,-20,20,20);gradient.addColorStop(0,'#f5e5cf');gradient.addColorStop(.35,spec.color);gradient.addColorStop(1,'#35465c');
+        h.fillStyle=gradient;h.strokeStyle='#111c2d';h.lineWidth=2;h.beginPath();
+        if(kind==='heavy')h.arc(0,0,21,0,Math.PI*2);
+        else if(kind==='ricochet'){h.moveTo(-12,-18);h.lineTo(12,-18);h.lineTo(18,-12);h.lineTo(18,12);h.lineTo(12,18);h.lineTo(-12,18);h.lineTo(-18,12);h.lineTo(-18,-12);h.closePath();}
+        else {for(let i=0;i<48;i++){const angle=i*Math.PI/24,r=i%4<2?22:19;const x=Math.cos(angle)*r,y=Math.sin(angle)*r;if(i===0)h.moveTo(x,y);else h.lineTo(x,y);}h.closePath();}
+        h.fill();h.stroke();h.strokeStyle='#1c2b40';h.lineWidth=2;
+        if(kind==='ricochet'){h.strokeRect(-8,-8,16,16);h.fillStyle='#fff3cf';h.fillRect(-4,-4,8,8);}
+        else {h.beginPath();h.arc(0,0,kind==='heavy'?14:12,0,Math.PI*2);h.stroke();h.fillStyle='#26364d';h.beginPath();h.arc(0,0,4,0,Math.PI*2);h.fill();}
+        obstacleCache.set(kind,{width:46,height:44,draw(c,x,y){c.drawImage(cache.image,x,y,46,44);}});
+    }return obstacleCache.get(kind);
+}
+function drawObstacle(ball){
+    if(game.slowed&&!motionPreference?.matches)drawGlow(ball.x+23,ball.y+22,'#8ecbff',66);
+    rotatedSprite(machineSprite(ball.kind),ball.x,ball.y,ball.rotation);
+    if(ball.weak){ctx.save();ctx.translate(ball.x+23,ball.y+22);ctx.rotate(ball.rotation);ctx.strokeStyle='#d0ffe3';ctx.lineWidth=2;
+        ctx.beginPath();ctx.moveTo(-9,-15);ctx.lineTo(2,-5);ctx.lineTo(-4,3);ctx.lineTo(10,15);ctx.stroke();ctx.beginPath();ctx.arc(0,0,24,0,Math.PI*2);ctx.stroke();ctx.restore();}
+    if(debugCollisions){ctx.save();ctx.strokeStyle='#ff77ce';ctx.beginPath();ctx.arc(ball.x+23,ball.y+22,ball.radius,0,Math.PI*2);ctx.stroke();ctx.restore();}
+}
+function drawWarning(ball){
+    ctx.save();ctx.strokeStyle=ball.color;ctx.fillStyle=ball.color;ctx.lineWidth=1.5;ctx.globalAlpha=.5;ctx.setLineDash([3,5]);ctx.beginPath();
+    for(let i=0;i<=12;i++){const p=obstacleAt(ball,ball.spawnAt+ball.warningDuration+i*.05);const y=Math.max(34,p.y+22);if(i===0)ctx.moveTo(p.x+23,y);else ctx.lineTo(p.x+23,y);}ctx.stroke();ctx.setLineDash([]);
+    const entry=obstacleAt(ball,ball.spawnAt+ball.warningDuration+.05);ctx.globalAlpha=.9;
+    ctx.translate(entry.x+23,40);ctx.rotate(ball.kind==='ricochet'?(ball.vx>0?-.55:.55):0);ctx.beginPath();ctx.moveTo(-5,-4);ctx.lineTo(5,-4);ctx.lineTo(0,4);ctx.closePath();ctx.fill();ctx.restore();
 }
 
 function drawShield(x, y) {
@@ -765,21 +821,23 @@ function draw() {
     ctx.save();
     if (game.state === 'dying' && !motionPreference?.matches) {
         const origin = game.deathOrigin;
-        const zoom = 1 + .06 * Math.sin(Math.min(1, game.deathElapsed / 1.2) * Math.PI);
+        const zoom = 1 + .06 * Math.sin(Math.min(1, game.deathElapsed / (game.deathDuration || .7)) * Math.PI);
         ctx.translate(origin.x, origin.y); ctx.scale(zoom, zoom); ctx.translate(-origin.x, -origin.y);
     }
     if (feedback.shake > 0 && !motionPreference?.matches) {
-        const decay = (feedback.shake / .42) ** 2;
+        const decay = (feedback.shake / (feedback.shakeMax || .22)) ** 2;
         const amount = feedback.strength * decay;
         ctx.translate(Math.sin(game.ticks * 2.399) * amount, Math.cos(game.ticks * 3.731) * amount * .75);
-        ctx.translate(WIDTH / 2, HEIGHT / 2); ctx.rotate(Math.sin(game.ticks * 1.7) * amount * .0009);
-        ctx.translate(-WIDTH / 2, -HEIGHT / 2);
+        if (game.state === 'dying') {
+            ctx.translate(WIDTH / 2, HEIGHT / 2); ctx.rotate(Math.sin(game.ticks * 1.7) * amount * .0009);
+            ctx.translate(-WIDTH / 2, -HEIGHT / 2);
+        }
     }
 
-    if (['playing', 'dying'].includes(game.state)) {
+    if (['playing', 'dying','celebrating'].includes(game.state)) {
         drawCookie(); drawOffers();
     }
-    syncShieldHum();
+    syncShieldHum();syncMusic();
     const bird = game.bird;
     const birdY = game.state === 'ready' && !motionPreference?.matches ? bird.y + 6 * Math.sin(game.ticks / 15) : bird.y;
     drawShield(bird.x + 28, birdY + 29);
@@ -800,19 +858,14 @@ function draw() {
         }
         ctx.save();
         ctx.globalAlpha = trail.remaining / .12 * .2;
-        spriteBird[trail.frame].draw(ctx, trail.x, trail.y);
+        birdSprite(trail.frame).draw(ctx, trail.x, trail.y);
         ctx.restore();
     }
-    const dead = ['dying', 'over'].includes(game.state);
+    const dead = game.state==='dying'||(game.state==='over'&&game.cause!=='complete');
     const frame = game.state === 'ready' && !motionPreference?.matches ? (Math.floor(game.ticks / 12) % 2) * 2 : bird.frame + (dead ? 4 : 0);
     const jumpProgress = 1 - feedback.jump / .24;
     const stretch = feedback.jump > 0 ? Math.cos(jumpProgress * Math.PI * 2) * .12 * (1 - jumpProgress) : 0;
-    rotatedSprite(spriteBird[frame], bird.x, birdY, dead ? bird.rotation : 0, stretch);
-    const look = LOOKS.find(look=>look.id===(game.state === 'ready' ? profileStore.value.look : game.profile.look));
-    if (look?.color) {
-        ctx.save(); ctx.strokeStyle=look.color;ctx.lineWidth=2;
-        ctx.beginPath();ctx.ellipse(bird.x+28,birdY+29,29,31,0,0,Math.PI*2);ctx.stroke();ctx.restore();
-    }
+    rotatedSprite(birdSprite(frame), bird.x, birdY, dead ? bird.rotation : 0, stretch);
     if (game.grace > 0) {
         ctx.save(); ctx.strokeStyle = '#d4f8ff'; ctx.lineWidth = 2; ctx.setLineDash([4, 5]);
         ctx.beginPath(); ctx.arc(bird.x + 28, birdY + 29, 36, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
@@ -825,17 +878,8 @@ function draw() {
         ctx.save();
         for (const ball of game.balls) {
             if (ball.broken) continue;
-            if (ball.wait > 0) {
-                ctx.save(); ctx.shadowBlur = 0; ctx.strokeStyle = '#ffbc8b'; ctx.fillStyle = '#ffbc8b';
-                ctx.globalAlpha = motionPreference?.matches ? .8 : .6 + .25 * Math.sin(game.ticks / 7);
-                const x = ball.x + 23;
-                ctx.beginPath(); ctx.moveTo(x - 6, 36); ctx.lineTo(x + 6, 36); ctx.lineTo(x, 44); ctx.closePath(); ctx.fill();
-                ctx.setLineDash([3, 6]); ctx.beginPath(); ctx.moveTo(x, 48); ctx.lineTo(x, 108); ctx.stroke();
-                ctx.restore();
-            } else {
-                if (game.slowed) drawGlow(ball.x + 23, ball.y + 22, '#8ecbff', 76);
-                rotatedSprite(spriteBall, ball.x, ball.y, ball.rotation);
-            }
+            if(ball.wait>0)drawWarning(ball);else drawObstacle(ball);
+
         }
         ctx.restore();
     }
@@ -844,17 +888,17 @@ function draw() {
     if (game.state === 'ready') {
         text('ZŁAP APETYT NA REKORD', WIDTH / 2, 142, 11, '#97acc8', 800);
         text('Ciastkobranie', WIDTH / 2, 184, 41, '#ffd78f', 800);
-        text(`Twój rekord: ${game.best} pkt`, WIDTH / 2, 227, 15, '#a4b5ce');
+        text(`${game.course.name} · ${game.course.duration}s`, WIDTH / 2, 227, 18, '#a4b5ce');
         const unlock = nextUnlock(profileStore.value);
         if (unlock) text(`${unlock.name}: ${unlock.current}/${unlock.target}`, WIDTH / 2, 258, 12, '#c9b3ff');
         text('Jeszcze jedno ciastko?', WIDTH / 2, 390, 24, '#f7f1df', 800);
         text('Dotknij lub naciśnij spację, żeby zacząć.', WIDTH / 2, 429, 15, '#a4b5ce');
-        text('Przetrwaj 4 minuty. Wybieraj ulepszenia lotem.', WIDTH / 2, 454, 12, '#a4b5ce');
+        text('Skacz, zbieraj, opanuj rytm.', WIDTH / 2, 454, 14, '#a4b5ce');
     }
     drawFeedback();
     ctx.restore();
     if (game.state === 'dying') {
-        ctx.save(); ctx.fillStyle = '#060c18'; ctx.globalAlpha = Math.min(.2, game.deathElapsed / 1.2 * .2);
+        ctx.save(); ctx.fillStyle = '#060c18'; ctx.globalAlpha = Math.min(.2, game.deathElapsed / (game.deathDuration || .7) * .2);
         ctx.fillRect(0, 0, WIDTH, HEIGHT); ctx.restore();
     }
     if (feedback.flash > 0 && !motionPreference?.matches) {
@@ -864,23 +908,9 @@ function draw() {
         ctx.fillRect(0, 0, WIDTH, HEIGHT);
         ctx.restore();
     }
-    if (game.state === 'playing') {
-        drawScore(); drawActiveBonuses();
-        if (game.chain >= 3) {
-            text(`×${game.multiplier}`, 156, 125, 22, '#ffd78f', 800);
-            ctx.fillStyle = '#ffd78f'; ctx.fillRect(130, 141, 50 * game.chainTime / 4, 2);
-        }
-        if (game.hasFeather) {
-            ctx.save(); ctx.translate(366, 126); ctx.rotate(-.5);
-            ctx.globalAlpha = game.featherUsed ? .2 : 1;
-            ctx.fillStyle = game.featherUsed ? '#a4b5ce' : '#ffd78f';
-            ctx.beginPath(); ctx.ellipse(0, 0, 5, 12, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#172640'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, -9); ctx.lineTo(0, 14); ctx.stroke();
-            ctx.restore();
-        }
-        // Only a newly earned trait or a rescue needs a brief textual notice.
-        if (feedback.banner?.notice) drawBanner();
-    }
+    if(['playing','dying','celebrating'].includes(game.state))drawHud();
+    if(feedback.banner?.notice)drawBanner();
+
 }
 function loop(timestamp) {
     if (previousTime === null) previousTime = timestamp;

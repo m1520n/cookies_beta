@@ -1,48 +1,20 @@
-import test from 'node:test';
-import assert from 'node:assert/strict';
-import { Director, projected, largestVerticalGap } from '../director.js';
-
-test('a thousand seeds preserve warnings, bounds, hazard limits and escape space',()=>{
-    for(let seed=0;seed<1000;seed++){
-        const director=new Director(seed); let previous;
-        for(let sector=0;sector<9;sector++){
-            const stage=director.configure(sector);
-            assert.ok(stage.balls<=3); assert.ok(director.speed<=6.25);
-            if(sector>=4)assert.notEqual(stage.pattern,previous);
-            previous=stage.pattern;
-            const balls=[];
-            for(let i=0;i<stage.balls;i++)balls.push(director.create(i,balls,{x:172,y:100+(seed%400)},i*.8));
-            for(const ball of balls){
-                assert.ok(ball.wait>=.6);
-                for(let t=0;t<7;t+=.1){const point=projected(ball,t);assert.ok(point.x>=-1e-8&&point.x<=354+1e-8);}
-            }
-            for(let t=0;t<7;t+=.05)assert.ok(largestVerticalGap(balls,t)>=140-1e-7);
-        }
-    }
+import test from 'node:test';import assert from 'node:assert/strict';
+import {Director} from '../director.js';import {COURSES,courseEvents} from '../courses.js';import {makeObstacle,obstacleAt,OBSTACLES} from '../obstacles.js';
+test('all schedules respect three hazards including warnings and all predicted shapes remain bounded',()=>{
+ for(const course of COURSES){const events=courseEvents(course,42);for(let time=0;time<course.duration;time+=.05){
+ const active=events.filter(event=>event.at<=time).map(event=>{const ball=makeObstacle(event);return {...ball,...obstacleAt(ball,time)};}).filter(ball=>ball.y<686&&ball.x>=-46&&ball.x<=400);
+ assert.ok(active.length<=3,`${course.id} at ${time}: ${active.length}`);for(const ball of active){assert.ok(ball.radius<=21);assert.ok(ball.x>=-1e-6&&ball.x<=354+1e-6);}
+ }}
 });
-test('new patterns are introduced with longer warnings and fallback is a delayed vertical drop',()=>{
-    const director=new Director(1);director.configure(0);
-    const first=director.create(0,[],{x:172,y:291});assert.ok(first.wait>=.9);
-    const second=director.create(0,[],{x:172,y:291});assert.ok(second.wait>=.6);
-    const d2=new Director(42);d2.configure(6);
-    const existing=[0,1,2].map(i=>({...second,wait:0,y:50+i*180,vy:5}));
-    const next=d2.create(3,existing,{x:172,y:291});
-    assert.equal(next.pattern,'rain');assert.ok(next.wait>1);
+test('a thousand marathon seeds preserve deterministic schedules independent of consumption',()=>{
+ for(let seed=0;seed<1000;seed++){
+ const a=new Director(COURSES[3],seed),b=new Director(COURSES[3],seed);
+ const first=a.due(125),second=[...b.due(60),...b.due(125)];assert.deepEqual(first,second);assert.deepEqual(a.due(260),b.due(260));
+ const events=a.events;for(let i=1;i<events.length;i++)assert.ok(events[i].at-events[i-1].at>=2-1e-7);
+ }
 });
-
-test('a thousand mixed transitions and finale entries preserve old hazards and safe future spawns',()=>{
-    for(let seed=0;seed<1000;seed++) {
-        const director=new Director(seed), bird={x:172,y:291};director.configure(4);
-        let balls=[];
-        for(let i=0;i<3;i++)balls.push(director.create(i,balls,bird,i*.8));
-        for(const [sector,options] of [[5,{}],[6,{}],[7,{pattern:'rain',alternating:true}],[7,{pattern:'diagonal'}],[7,{pattern:'pairs'}],[8,{}]]) {
-            const old=balls.map(ball=>({...ball}));director.configure(sector,options);assert.deepEqual(balls,old);
-            // Replace one slot at a time, leaving the other patterns in flight.
-            for(let i=0;i<3;i++) {
-                balls[i]=director.create(i,balls.filter((_,index)=>index!==i),bird);
-                assert.ok(balls[i].wait>=.6);
-                for(let t=0;t<7;t+=.1)assert.ok(largestVerticalGap(balls,t)>=140-1e-7,`seed ${seed}, sector ${sector}`);
-            }
-        }
-    }
+test('ricochets have one reflected direction and pendulums have a predictable curved path',()=>{
+ const r=makeObstacle({id:'r',kind:'ricochet',at:0,x:60});const p1=obstacleAt(r,2),p2=obstacleAt(r,3),p3=obstacleAt(r,3.5);
+ assert.ok(p2.x>p1.x);assert.ok(p3.x<p2.x);const p=makeObstacle({id:'p',kind:'pendulum',at:0,x:88});assert.notEqual(obstacleAt(p,1.5).x,obstacleAt(p,2).x);
+ assert.ok(OBSTACLES.ricochet.radius<OBSTACLES.heavy.radius);
 });
