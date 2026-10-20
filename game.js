@@ -78,13 +78,18 @@ motionPreference?.addEventListener('change', resetFeedback);
 function addFeedback(event) {
     if (event.type === 'offer') { announcement.textContent = 'Wybierz jedną z dwóch cech, przelatując przez jej symbol.'; return; }
     if (event.type === 'finalPhase') return;
+    if(event.type==='points'){feedback.labels.push({x:event.x,y:event.y,points:event.points,remaining:.6});return;}
     if(event.type==='pocket'){announcement.textContent='Kieszeń podtrzymuje serię.';return;}
+    if (event.type === 'ready') {announcement.textContent='Szał gotowy. Zbierz kolejne ciastko.';return;}
     if (event.type === 'near' || event.type === 'ability') {
         if (!motionPreference?.matches) {
             feedback.rings.push({x:event.x ?? game.bird.x+28,y:event.y ?? game.bird.y+29,remaining:.5,color:event.color,large:event.type==='ability'});
             if (event.type === 'ability') arcadeImpact(4,event.color);
         }
-        if (event.type === 'ability') announcement.textContent = `Zdolność: ${event.title}`;
+        if (event.type === 'ability') {
+            announcement.textContent = `Zdolność: ${event.title}`;
+            if(game.isGreed)feedback.banner={title:'SZAŁ!',color:game.style.color,remaining:.65,notice:true};
+        }
         return;
     }
     if (event.type === 'victory' || event.type === 'finale') {
@@ -142,6 +147,7 @@ function addFeedback(event) {
         if (event.magnetic && !motionPreference?.matches) {
             feedback.trail.push({pickup: true, x:event.x, y:event.y, targetX:event.targetX, targetY:event.targetY, remaining:.25});
         }
+        if(event.golden && !motionPreference?.matches)arcadeImpact(3,'#ffd34f',.1);
         const powerup = POWERUPS[event.cookieType];
         if (powerup && !feedback.banner?.notice) {
             feedback.banner = { title: `${powerup.label.toUpperCase()} · ${powerup.duration} s`, detail: '', remaining: .75, color: powerup.color };
@@ -189,8 +195,8 @@ function updateFeedback() {
         feedback.banner.remaining -= STEP;
         if (feedback.banner.remaining <= 0) feedback.banner = null;
     }
-    if (!motionPreference?.matches && ((game.state === 'playing' && (game.shielded || game.effects.double > 0 || game.abilityRemaining > 0)) || game.state === 'dying') && game.ticks % 4 === 0) {
-        feedback.trail.push({ x: game.bird.x, y: game.bird.y, frame: game.bird.frame, remaining: .12 });
+    if (!motionPreference?.matches && ((game.state === 'playing' && (game.shielded || game.effects.double > 0 || game.abilityRemaining > 0 || (game.isGreed && game.multiplier>=2))) || game.state === 'dying') && game.ticks % 4 === 0) {
+        feedback.trail.push({ x: game.bird.x, y: game.bird.y, frame: game.bird.frame, remaining: game.isGreed ? .12+.03*game.multiplier : .12 });
     }
     for (const trail of feedback.trail) trail.remaining -= STEP;
     feedback.trail = feedback.trail.filter(trail => trail.remaining > 0);
@@ -276,6 +282,16 @@ function playArcade(name) {
         tone(1800, 350, .07, .018, 'square', .025);
     } else if (name.startsWith('warning-')) {
         const note={heavy:180,ricochet:440,pendulum:660}[name.slice(8)];if(note)tone(note,note,.12,.018,'sine');
+    } else if (name === 'golden') {
+        tone(880,1320,.12,.04,'triangle');tone(1760,1760,.16,.025,'sine',.07);
+    } else if (name === 'frenzy-ready') {
+        tone(660,880,.1,.025,'sine');tone(1320,1320,.15,.025,'sine',.1);
+    } else if (name === 'frenzy') {
+        [220,440,660,880].forEach((n,i)=>tone(n,n*1.1,.22,.04,'triangle',i*.045));
+    } else if (name === 'frenzy-ending') {
+        tone(660,440,.12,.035,'square');tone(440,330,.12,.03,'triangle',.17);
+    } else if (name === 'frenzy-end') {
+        tone(330,110,.25,.035,'triangle');
     } else if (name === 'feather') {
         tone(220, 880, .45, .07);
         for (let i = 0; i < 3; i++) tone(660 * 2 ** (i / 3), 880 * 2 ** (i / 3), .24, .035, 'sine', i * .09);
@@ -299,6 +315,8 @@ function syncMusic(){
         if(beat%2===0)note(75,35,.12,.018,'sine');
         if(beat%4===0){const bass=[110,110,146.83,130.81][Math.floor(beat/8)%4];note(bass,bass,.3,.012,'triangle');}
         if(beat%2===1)note(2400,500,.035,.004,'sine');
+        if(game.isGreed && game.multiplier>=2 && beat%2===1)note(330*game.multiplier,330*game.multiplier,.08,.008,'triangle');
+        if(game.isGreed && game.abilityRemaining>0)note(880,440,.06,.012,'triangle');
     }
 }
 function syncShieldHum() {
@@ -330,27 +348,28 @@ const game = new Game({
     onVictory(id,mode) { profileStore.recordVictory(id,mode); },
     onSettle(snapshot) {
         settlement = profileStore.settle(snapshot);
-        write('bestScore', game.best);
+        if(!game.isGreed)write('bestScore', game.best);
     },
     onFinish(score, record) {
         resultSince = performance.now();
-        write('bestScore', record);
-        const recordNow=profileStore.value.records[`${game.course.id}:${game.profile.runStyle}`];
-        const marathon=game.course.id==='marathon';
+        if(!game.isGreed)write('bestScore', record);
+        const recordNow=currentRecord();
+        const marathon=game.course.id==='marathon',pointsMode=game.isGreed||marathon;
         document.querySelector('#result-title').textContent=game.practice ? (game.won?'Fragment opanowany':'Trening') : game.won?'Trasa ukończona!':'Jeszcze jedna próba?';
         const progress=runProgress();
-        document.querySelector('#score').textContent=game.practice ? `${Math.floor(progress*100+1e-5)}% fragmentu` : marathon ? `${score} pkt` : `${Math.floor(progress*100+1e-5)}% trasy`;
-        document.querySelector('#best').textContent=game.practice ? 'Trening bez nagród' : marathon ? `Rekord: ${Math.max(recordNow.score,profileStore.value.legacyBest)} pkt` : `Rekord: ${Math.floor(recordNow.progress*100+1e-5)}%`;
+        document.querySelector('#score').textContent=game.practice ? `${Math.floor(progress*100+1e-5)}% fragmentu` : pointsMode ? `${score} pkt` : `${Math.floor(progress*100+1e-5)}% trasy`;
+        document.querySelector('#best').textContent=game.practice ? 'Trening bez nagród' : pointsMode ? `Rekord: ${game.isGreed?recordNow.score:Math.max(recordNow.score,profileStore.value.legacyBest)} pkt` : `Rekord: ${Math.floor(recordNow.progress*100+1e-5)}%`;
         document.querySelector('#run-detail').textContent=game.course.name;
         document.querySelector('#earned').textContent=game.practice?'':`+${settlement?.crumbs||0} okruchów`;
-        practiceButton.disabled=!game.checkpoint;practiceButton.hidden=game.won&&!game.practice;
+        practiceButton.disabled=!game.checkpoint;practiceButton.hidden=game.isGreed||game.won&&!game.practice;
+        document.querySelector('#run-detail').hidden=game.isGreed;document.querySelector('#earned').hidden=game.isGreed;
         practiceButton.textContent=game.practice?'Powtórz fragment':'Trening fragmentu';
         restartButton.textContent=game.practice?'Normalna próba':'Jeszcze raz';
         const next=COURSES[COURSES.findIndex(course=>course.id===game.course.id)+1];
         nextCourseButton.hidden=game.practice||!game.won||marathon||!next||!unlockedCourses(profileStore.value).includes(next.id);
         restartButton.setAttribute('class',nextCourseButton.hidden?'':'secondary');
         for(const id of ['#next-goal','#highlight','#unlock-progress','#result-nest'])document.querySelector(id).hidden=true;
-        announcement.textContent=`${game.practice?'Trening.':game.won?'Zwycięstwo.':'Koniec rundy.'} Postęp ${Math.floor(progress*100)} procent.`;
+        announcement.textContent=game.isGreed?`Koniec rundy. Wynik ${score}. Rekord ${recordNow.score}.`:`${game.practice?'Trening.':game.won?'Zwycięstwo.':'Koniec rundy.'} Postęp ${Math.floor(progress*100)} procent.`;
         syncPanels();
         restartButton.focus({ preventScroll: true });
     },
@@ -363,7 +382,11 @@ function syncPanels(){
     skipButton.disabled=game.deathElapsed<.12;
     document.querySelector('#open-nest').disabled=!['ready','over'].includes(game.state);
     document.querySelector('#open-courses').disabled=!['ready','over'].includes(game.state);
-    document.querySelector('#open-courses').textContent=game.course.name;
+    document.querySelector('#play-greed').disabled=!['ready','over'].includes(game.state);
+    document.querySelector('#play-greed').setAttribute('aria-pressed',String(game.isGreed));
+    document.querySelector('#hud').setAttribute('data-mode',game.course.id);
+    document.querySelector('#hud-charges').hidden=!game.isGreed;
+    if(!game.isGreed)document.querySelector('#hud').setAttribute('data-frenzy','');
     result.hidden=game.state!=='over'||!nestPanel.hidden||!coursesPanel.hidden;pausePanel.hidden=!game.paused;
     const hudVisible=['playing','dying','celebrating'].includes(game.state);document.querySelector('#hud').style.setProperty('visibility',hudVisible?'visible':'hidden');document.querySelector('#hud').setAttribute('aria-hidden',String(!hudVisible));
 }
@@ -406,7 +429,8 @@ resumeButton.addEventListener('click', () => setPaused(false));
 skipButton.addEventListener('click',jump);
 practiceButton.addEventListener('click',()=>{clearRunView();game.startPractice();lastPanelState='';syncPanels();canvas.focus();});
 nextCourseButton.addEventListener('click',()=>{const next=COURSES[COURSES.findIndex(course=>course.id===game.course.id)+1];if(next)selectCourse(next.id);});
-document.querySelector('#open-courses').addEventListener('click',openCourses);
+document.querySelector('#play-greed').addEventListener('click',()=>selectCourse('greed'));
+ document.querySelector('#open-courses').addEventListener('click',openCourses);
 document.querySelector('#close-courses').addEventListener('click',closeCourses);
 document.querySelector('#new-marathon').addEventListener('click',()=>{game.fixedSeed=undefined;game.retrySeed=undefined;selectCourse('marathon');});
 document.querySelector('#open-nest').addEventListener('click', openNest);
@@ -425,7 +449,7 @@ canvas.addEventListener('pointerdown', event => {
 document.addEventListener('keydown', event => {
     const activePanel = !coursesPanel.hidden ? coursesPanel : !nestPanel.hidden ? nestPanel : game.paused ? pausePanel : game.state === 'over' ? result : null;
     if (event.code === 'Tab' && activePanel) {
-        const buttons = [...activePanel.querySelectorAll('button:not([disabled])')];
+        const buttons = [...activePanel.querySelectorAll('button:not([disabled]), summary')].filter(button=>!button.hidden&&!button.closest('[hidden]'));
         const first = buttons[0], last = buttons.at(-1);
         if (event.shiftKey && event.target === first) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && event.target === last) { event.preventDefault(); first?.focus(); }
@@ -456,7 +480,7 @@ function selectCourse(id){
 }
 function closeCourses(){coursesPanel.hidden=true;lastPanelState='';syncPanels();if(game.state==='over')restartButton.focus();else canvas.focus();}
 function openCourses(){
-    if(!['ready','over'].includes(game.state))return;profileStore.reload();result.hidden=true;
+    if(!['ready','over'].includes(game.state))return;profileStore.reload();nestPanel.hidden=true;result.hidden=true;
     const list=document.querySelector('#course-items');list.replaceChildren();
     for(const course of COURSES){
         const b=document.createElement('button');b.type='button';b.className='choice';b.disabled=!unlockedCourses(profileStore.value).includes(course.id);
@@ -469,8 +493,10 @@ function openCourses(){
 }
 function openNest() {
     if (!['ready', 'over'].includes(game.state)) return;
-    profileStore.reload();
+    coursesPanel.hidden=true;profileStore.reload();
     result.hidden = true;
+    for(const id of ['#challenge-options','#challenge-upgrades','#challenge-guide'])document.querySelector(id).hidden=game.isGreed;
+    document.querySelector('#nest-intro').textContent=game.isGreed?'Łasuch: równy start. Ulepszenia i pióro działają w Wyzwaniach.':'Ulepszenia na kolejne próby. Każde ma dwa poziomy.';
     document.querySelector('#crumb-balance').textContent = `${profileStore.value.crumbs} okruchów`;
     const styles = document.querySelector('#run-styles'); styles.replaceChildren();
     for (const style of STYLES) {
@@ -499,7 +525,8 @@ function openNest() {
     const build = profileStore.value.lastBuild.map(item=>`${CARDS.find(card=>card.id===item.id)?.name} ${item.rank}`).join(' · ');
     document.querySelector('#last-build').textContent = build ? `Ostatni zestaw: ${build}` : 'Zestaw: wybierz symbole torem lotu. Maksymalnie 3 cechy, każda do poziomu 2.';
     const last = profileStore.value.lastRun;
-    document.querySelector('#last-metrics').textContent = last ? `${Math.floor(last.elapsed)} s lotu · ${last.metrics.nearMisses} uników · ${last.metrics.abilities} zdolności · ${Math.round(last.metrics.shieldSeconds)} s ochrony · ${Math.round(last.metrics.twoPowerSeconds)} s z dwiema mocami · ${last.metrics.rescues} ratunków · cechy ${last.metrics.offersTaken}/${last.metrics.offersSeen} · pierwsza cecha ${last.metrics.firstTraitAt?Math.round(last.metrics.firstTraitAt)+'s':'—'} · rewanż ${last.metrics.retrySeconds.toFixed(1)}s · koniec: ${{ball:'piłka',floor:'dolne kolce',ceiling:'górne kolce',complete:'ukończenie'}[last.metrics.cause]}` : 'Rozegraj pierwszą rundę.';
+    document.querySelector('#last-build').hidden=last?.mode==='greed';
+    document.querySelector('#last-metrics').textContent = last?.mode==='greed' ? `${Math.floor(last.elapsed)} s lotu · złote ciastka: ${last.metrics.goldenCookies} · Szały: ${last.metrics.abilities} · rozbicia: ${last.metrics.shatters} · pierwszy Szał: ${last.metrics.firstFrenzyAt?last.metrics.firstFrenzyAt.toFixed(1)+' s':'—'} · rewanż: ${last.metrics.retrySeconds.toFixed(1)} s` : last ? `${Math.floor(last.elapsed)} s lotu · ${last.metrics.nearMisses} uników · ${last.metrics.abilities} zdolności · ${Math.round(last.metrics.shieldSeconds)} s ochrony · ${Math.round(last.metrics.twoPowerSeconds)} s z dwiema mocami · ${last.metrics.rescues} ratunków · cechy ${last.metrics.offersTaken}/${last.metrics.offersSeen} · pierwsza cecha ${last.metrics.firstTraitAt?Math.round(last.metrics.firstTraitAt)+'s':'—'} · rewanż ${last.metrics.retrySeconds.toFixed(1)}s · koniec: ${{ball:'piłka',floor:'dolne kolce',ceiling:'górne kolce',complete:'ukończenie'}[last.metrics.cause]}` : 'Rozegraj pierwszą rundę.';
     const list = document.querySelector('#nest-items'); list.replaceChildren();
     for (const item of NEST_UPGRADES) {
         const rank = profileStore.value.upgrades[item.id];
@@ -685,10 +712,13 @@ function drawGlow(x, y, color, size = 80) {
     ctx.drawImage(glowCache.get(color), x - size / 2, y - size / 2, size, size);
 }
 
+function currentRecord(){return profileStore.value.records[game.isGreed?'greed':`${game.course.id}:${game.profile.runStyle}`];}
 function runProgress(){return game.practice?Math.max(0,Math.min(1,(game.courseTime-(game.practiceEnd-sectorDuration(game.course)))/sectorDuration(game.course))):game.progress;}
 function drawHud(){
     const progress=runProgress();
-    const record=profileStore.value.records[`${game.course.id}:${game.profile.runStyle}`];
+    document.querySelector('#hud-best').hidden=false;document.querySelector('.progress-track').setAttribute('aria-label','Postęp trasy');
+    const record=currentRecord();
+    if(game.isGreed){drawGreedHud();return;}
     uiText('#hud-score',String(game.score));uiText('#hud-course',`${game.practice?'Trening · ':''}${game.course.name} · ${game.level}`);uiText('#hud-percent',`${Math.floor(progress*100+1e-5)}%`);
     document.querySelector('#hud-progress').style.setProperty('transform',`scaleX(${progress})`);
     document.querySelector('#hud-best').style.setProperty('--best',`${(game.practice?0:record.progress)*100}%`);
@@ -709,8 +739,33 @@ function drawHud(){
     if(uiValues.get('powers')!==powerKey){const powers=document.querySelector('#hud-powers');powers.replaceChildren();for(const p of Object.values(POWERUPS)){const remaining=game.effects[p.effect];if(remaining>0){const span=document.createElement('span');span.textContent=`${p.symbol}${Math.ceil(remaining)}s`;span.title=p.label;span.style.setProperty('--tone',remaining<=2?'#ffd18a':p.color);powers.append(span);}}uiValues.set('powers',powerKey);}
 }
 
+function drawGreedHud(){
+    uiText('#hud-score',String(game.score));uiText('#hud-course','Łasuch');uiText('#hud-percent','');
+    const series=document.querySelector('.progress-track');series.setAttribute('aria-label','Pozostały czas serii');
+    document.querySelector('#hud-progress').style.setProperty('transform',`scaleX(${game.chainTime/4})`);
+    document.querySelector('#hud-best').hidden=true;
+    uiText('#hud-combo',`×${game.multiplier}`);
+    const active=game.abilityRemaining>0,cooling=game.abilityCooldown>0;
+    const state=active?'active':cooling?'cooling':game.abilityReady?'ready':'charging';
+    const hud=document.querySelector('#hud');hud.setAttribute('data-frenzy',state);
+    uiText('#hud-energy-label',active?`SZAŁ · ${Math.ceil(game.abilityRemaining)}s`:cooling?`↻ ${Math.ceil(game.abilityCooldown)}s`:game.abilityReady?'✦ Zbierz ciastko':'SZAŁ');
+    const key=`${state}:${game.energy}`;
+    if(uiValues.get('charges')!==key){
+        const charges=document.querySelector('#hud-charges');
+        charges.setAttribute('aria-label',active?'Szał aktywny':cooling?'Przerwa przed ładowaniem':`${game.energy} z 4 ładunków Szału`);
+        for(const [i,segment] of [...charges.querySelectorAll('i')].entries())segment.setAttribute('data-filled',String(active||i<game.energy));
+        uiValues.set('charges',key);
+    }
+}
+
 function drawCookie() {
     const cookie = game.cookie;
+    if(game.isGreed && game.goldenCookie){
+        ctx.save();drawGlow(cookie.x+15,cookie.y+10,'#ffd34f',motionPreference?.matches?56:64);
+        ctx.strokeStyle='#ffe28a';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(cookie.x+15,cookie.y+10,21,17,0,0,Math.PI*2);ctx.stroke();
+        spriteCookie[0].draw(ctx,cookie.x,cookie.y);ctx.fillStyle='#ffd34f66';ctx.beginPath();ctx.ellipse(cookie.x+15,cookie.y+10,15,10,0,0,Math.PI*2);ctx.fill();
+        text('×3',cookie.x+15,cookie.y-12,12,'#ffe28a',800);ctx.restore();return;
+    }
     const powerup = POWERUPS[cookie.type];
     if(game.abilityReady){ctx.save();ctx.strokeStyle=game.style.color;ctx.lineWidth=3;ctx.beginPath();ctx.arc(cookie.x+15,cookie.y+10,25,0,Math.PI*2);ctx.stroke();ctx.restore();}
     if (!powerup) { spriteCookie[0].draw(ctx, cookie.x, cookie.y); return; }
@@ -791,10 +846,10 @@ function drawWarning(ball){
 }
 
 function drawShield(x, y) {
-    const abilityShield = game.profile.runStyle === 'guard' && game.abilityRemaining > 0;
+    const abilityShield = (game.isGreed || game.profile.runStyle === 'guard') && game.abilityRemaining > 0;
     const remaining = Math.max(game.effects.invincible, abilityShield ? game.abilityRemaining : 0);
     if (remaining <= 0) return;
-    const ending = remaining <= 2;
+    const ending = remaining <= (game.isGreed?1:2);
     const color = ending ? '#ffd18a' : abilityShield ? game.style.color : '#bda4ff';
     const pulse = ending && !motionPreference?.matches ? .78 + .22 * Math.sin(game.ticks / 6) : 1;
     ctx.save();
@@ -812,7 +867,7 @@ function drawShield(x, y) {
     ctx.beginPath();
     ctx.arc(x, y, 34, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, remaining / (abilityShield && game.abilityRemaining >= game.effects.invincible ? game.abilityMax : game.effectMax.invincible || 5)));
     ctx.stroke();
-    if (ending) text(`${Math.ceil(remaining)} s`, Math.max(26, Math.min(WIDTH - 26, x)), Math.max(42, y - 46), 13, color, 800);
+    if (ending && !game.isGreed) text(`${Math.ceil(remaining)} s`, Math.max(26, Math.min(WIDTH - 26, x)), Math.max(42, y - 46), 13, color, 800);
     ctx.restore();
 }
 
@@ -857,7 +912,8 @@ function draw() {
             ctx.restore(); continue;
         }
         ctx.save();
-        ctx.globalAlpha = trail.remaining / .12 * .2;
+        ctx.globalAlpha = Math.min(.4,trail.remaining / .12 * (game.isGreed?.25:.2));
+        if(game.isGreed){ctx.strokeStyle=game.abilityRemaining>0?'#ffb74f':'#ffd78f';ctx.lineWidth=game.abilityRemaining>0?4:game.multiplier;ctx.beginPath();ctx.moveTo(trail.x+28,trail.y+29);ctx.lineTo(bird.x+28,birdY+29);ctx.stroke();}
         birdSprite(trail.frame).draw(ctx, trail.x, trail.y);
         ctx.restore();
     }
@@ -888,12 +944,13 @@ function draw() {
     if (game.state === 'ready') {
         text('ZŁAP APETYT NA REKORD', WIDTH / 2, 142, 11, '#97acc8', 800);
         text('Ciastkobranie', WIDTH / 2, 184, 41, '#ffd78f', 800);
-        text(`${game.course.name} · ${game.course.duration}s`, WIDTH / 2, 227, 18, '#a4b5ce');
+        text(game.isGreed?'Łasuch · leć po rekord':`${game.course.name} · ${game.course.duration}s`, WIDTH / 2, 227, 18, '#a4b5ce');
         const unlock = nextUnlock(profileStore.value);
-        if (unlock) text(`${unlock.name}: ${unlock.current}/${unlock.target}`, WIDTH / 2, 258, 12, '#c9b3ff');
+        if(game.isGreed)text('4 ładunki + ciastko → Szał', WIDTH / 2, 258, 13, '#ffcd85');
+        if (unlock && !game.isGreed) text(`${unlock.name}: ${unlock.current}/${unlock.target}`, WIDTH / 2, 258, 12, '#c9b3ff');
         text('Jeszcze jedno ciastko?', WIDTH / 2, 390, 24, '#f7f1df', 800);
         text('Dotknij lub naciśnij spację, żeby zacząć.', WIDTH / 2, 429, 15, '#a4b5ce');
-        text('Skacz, zbieraj, opanuj rytm.', WIDTH / 2, 454, 14, '#a4b5ce');
+        text(game.isGreed?'W Szale rozbijasz. Kolce nadal groźne.':'Skacz, zbieraj, opanuj rytm.', WIDTH / 2, 454, 14, '#a4b5ce');
     }
     drawFeedback();
     ctx.restore();

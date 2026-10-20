@@ -8,7 +8,7 @@ export class Director {
     constructor(course,seed=0){this.course=course;this.seed=seed;this.cursor=0;this.events=[];this.sectors=0;}
     ensure(time){
         const needed=Math.floor(time/sectorDuration(this.course))+1;
-        const limit=this.course.id==='marathon' ? needed : Math.min(3,needed);
+        const limit=this.course.endless || this.course.id==='marathon' ? needed : Math.min(3,needed);
         while(this.sectors<limit){this.events.push(...sectorEvents(this.course,this.sectors,this.seed));this.sectors++;}
     }
     due(time){this.ensure(time);const result=[];while(this.cursor<this.events.length && this.events[this.cursor].at<=time+1e-7)result.push(this.events[this.cursor++]);return result;}

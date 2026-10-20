@@ -31,12 +31,12 @@ export const STYLES = [
 const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
 function cleanMetrics(value = {}) {
     const number = key => Number.isFinite(value?.[key]) && value[key] >= 0 ? value[key] : 0;
-    return {shieldSeconds:number('shieldSeconds'),twoPowerSeconds:number('twoPowerSeconds'),nearMisses:Math.floor(number('nearMisses')),
+    return {goldenCookies:Math.floor(number('goldenCookies')),shatters:Math.floor(number('shatters')),firstFrenzyAt:number('firstFrenzyAt'),shieldSeconds:number('shieldSeconds'),twoPowerSeconds:number('twoPowerSeconds'),nearMisses:Math.floor(number('nearMisses')),
         firstTraitAt:number('firstTraitAt'),offersSeen:Math.floor(number('offersSeen')),offersTaken:Math.floor(number('offersTaken')),retrySeconds:number('retrySeconds'),abilities:Math.floor(number('abilities')),rescues:Math.floor(number('rescues')),cause:['ball','floor','ceiling','complete'].includes(value?.cause) ? value.cause : 'ball'};
 }
 export function unlockedCourses(profile) {
     const clears=profile.courseClears||[];
-    return ['press', ...(profile.legacyWinner || clears.includes('press') ? ['ricochet'] : []),
+    return ['greed','press', ...(profile.legacyWinner || clears.includes('press') ? ['ricochet'] : []),
         ...(profile.legacyWinner || clears.includes('ricochet') ? ['mechanism'] : []), 'marathon'];
 }
 const positive=value=>Number.isFinite(value)&&value>=0 ? value : 0;
@@ -45,10 +45,10 @@ export function cleanProfile(value = {}) {
     const legacyWinner=typeof value.legacyWinner==='boolean' ? value.legacyWinner : count(value.wins)>0;
     const courseClears=Array.isArray(value.courseClears) ? value.courseClears.filter(id=>COURSES.some(course=>course.id===id&&id!=='marathon')) : [];
     return {
-        legacyWinner,courseClears,selectedCourse:unlockedCourses({legacyWinner,courseClears}).includes(value.selectedCourse) ? value.selectedCourse : 'press',
+        legacyWinner,courseClears,greedIntroduced:true,selectedCourse:value.greedIntroduced===true && unlockedCourses({legacyWinner,courseClears}).includes(value.selectedCourse) ? value.selectedCourse : 'greed',
         ownedLooks:Array.isArray(value.ownedLooks) ? value.ownedLooks.filter(id=>LOOKS.some(look=>look.id===id&&look.cost)) : [],
         legacyBest:count(value.legacyBest),legacyBestImported:value.legacyBestImported===true,
-        records:Object.fromEntries(COURSES.flatMap(course=>STYLES.map(style=>{const key=`${course.id}:${style.id}`,record=value.records?.[key];return [key,{progress:Math.min(1,positive(record?.progress)),score:count(record?.score)}];}))),
+        records:{greed:{progress:0,score:count(value.records?.greed?.score)},...Object.fromEntries(COURSES.flatMap(course=>STYLES.map(style=>{const key=`${course.id}:${style.id}`,record=value.records?.[key];return [key,{progress:Math.min(1,positive(record?.progress)),score:count(record?.score)}];})))},
         wins: count(value.wins), bestChain: count(value.bestChain),
         look: unlockedLooks({wins:count(value.wins),bestChain:count(value.bestChain),ownedLooks:Array.isArray(value.ownedLooks)?value.ownedLooks:[]}).includes(value.look) ? value.look : 'classic',
         victoryRuns: Array.isArray(value.victoryRuns) ? value.victoryRuns.filter(id => typeof id === 'string').slice(-128) : [],
@@ -58,7 +58,7 @@ export function cleanProfile(value = {}) {
         lifetimeBonuses: count(value.lifetimeBonuses), runs: count(value.runs), bestSector: count(value.bestSector),
         upgrades: Object.fromEntries(NEST_UPGRADES.map(item => [item.id, Math.min(2, count(value.upgrades?.[item.id]))])),
         settledRuns: Array.isArray(value.settledRuns) ? value.settledRuns.filter(id => typeof id === 'string').slice(-128) : [],
-        lastRun: value.lastRun ? {id:typeof value.lastRun.id==='string'?value.lastRun.id:'',mode:COURSES.some(course=>course.id===value.lastRun.mode)?value.lastRun.mode:'marathon',progress:Math.min(1,positive(value.lastRun.progress)), seed: count(value.lastRun.seed), score: count(value.lastRun.score), level: count(value.lastRun.level), elapsed:Number.isFinite(value.lastRun.elapsed) && value.lastRun.elapsed >= 0 ? value.lastRun.elapsed : 0, metrics:cleanMetrics(value.lastRun.metrics) } : null,
+        lastRun: value.lastRun ? {id:typeof value.lastRun.id==='string'?value.lastRun.id:'',mode:value.lastRun.mode==='greed'||COURSES.some(course=>course.id===value.lastRun.mode)?value.lastRun.mode:'marathon',progress:Math.min(1,positive(value.lastRun.progress)), seed: count(value.lastRun.seed), score: count(value.lastRun.score), level: count(value.lastRun.level), elapsed:Number.isFinite(value.lastRun.elapsed) && value.lastRun.elapsed >= 0 ? value.lastRun.elapsed : 0, metrics:cleanMetrics(value.lastRun.metrics) } : null,
     };
 }
 export function unlockedCards(profile) {
@@ -94,7 +94,7 @@ export class ProfileStore {
         if (run?.practice || !run?.id || this.value.settledRuns.includes(run.id)) return { awarded: false, crumbs: 0, unlocked: [] };
         const before = unlockedCards(this.value);
         const collected = count(run.collected);
-        const sectors = count(run.completedSectors);
+        const sectors = run.mode==='greed' ? 0 : count(run.completedSectors);
         const crumbs = collected + sectors * 3;
         this.value.crumbs += crumbs;
         this.value.lifetimeCookies += collected;
@@ -103,7 +103,7 @@ export class ProfileStore {
         this.value.bestChain = Math.max(this.value.bestChain, count(run.bestChain));
         this.value.lastBuild = cleanProfile({lastBuild:run.build}).lastBuild;
         this.value.bestSector = Math.max(this.value.bestSector, count(run.level));
-        const key=`${run.mode||'marathon'}:${run.style||'guard'}`;
+        const key=run.mode==='greed' ? 'greed' : `${run.mode||'marathon'}:${run.style||'guard'}`;
         if(this.value.records[key]) {this.value.records[key].progress=Math.max(this.value.records[key].progress,Math.min(1,positive(run.progress)));this.value.records[key].score=Math.max(this.value.records[key].score,count(run.score));}
         this.value.lastRun = {id:run.id,mode:run.mode||'marathon',progress:Math.min(1,positive(run.progress)), seed: count(run.seed), score: count(run.score), level: count(run.level), elapsed:Number.isFinite(run.elapsed) && run.elapsed >= 0 ? run.elapsed : 0, metrics:cleanMetrics(run.metrics) };
         this.value.settledRuns = [...this.value.settledRuns, run.id].slice(-128);
@@ -112,7 +112,7 @@ export class ProfileStore {
     }
     recordVictory(id,courseId='marathon') {
         this.reload();
-        if (typeof id !== 'string' || !id || this.value.victoryRuns.includes(id)) return false;
+        if (courseId==='greed' || typeof id !== 'string' || !id || this.value.victoryRuns.includes(id)) return false;
         this.value.victoryRuns = [...this.value.victoryRuns, id].slice(-128);
         this.value.wins++;
         if(courseId!=='marathon' && COURSES.some(course=>course.id===courseId) && !this.value.courseClears.includes(courseId))this.value.courseClears.push(courseId);

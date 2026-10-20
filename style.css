@@ -123,3 +123,31 @@ button:disabled { cursor: default; opacity: .45; }
     #hud-feather svg { width:8px; }
     #hud-powers { font-size:8px;gap:2px; }
 }
+
+/* Łasuch keeps the same reserved HUD height when switching modes. */
+#play-greed { min-height:32px;padding:4px 9px;font-size:12px; }
+#play-greed[aria-pressed="true"] { border-color:#ffb74f;color:#ffcd85; }
+#hud-charges { display:flex;gap:5px;flex:1;min-width:40px; }
+#hud-charges i { flex:1;height:9px;border:1px solid #8a6a494f;border-radius:3px;background:#17263b; }
+#hud-charges i[data-filled="true"] { background:#ffc35d;border-color:#ffe4a8; }
+#hud[data-mode="greed"] .energy-track,#hud[data-mode="greed"] #hud-traits,#hud[data-mode="greed"] #hud-feather,#hud[data-mode="greed"] #hud-powers { display:none; }
+#hud:not([data-mode="greed"]) #hud-charges { display:none; }
+#hud[data-mode="greed"] #hud-charges { display:flex!important; }
+#hud[data-mode="greed"] #hud-energy-label { display:inline;min-width:49px;color:#ffc35d; }
+#hud[data-mode="greed"] .progress-track i { background:#ffcb75; }
+#hud[data-frenzy="ready"],#hud[data-frenzy="active"] { border-color:#ffbd5b99; }
+#hud[data-frenzy="active"] { background:#322719; }
+#hud[data-frenzy="cooling"] #hud-charges { opacity:.4; }
+@media (max-width:480px) { .toolbar > span { display:none; } }
+@media (max-height:450px) { #play-greed {font-size:10px;padding:4px 6px;} #hud-charges {gap:2px;} #hud[data-mode="greed"] #hud-energy-label {min-width:35px;font-size:8px;} }
+
+.toolbar > span { display:none; }
+@media (max-height:450px) and (min-width:600px) {
+    .game { display:grid;grid-template-columns:150px auto;grid-template-rows:min-content min-content 1fr;column-gap:14px;width:calc((100dvh - 20px) * .625 + 164px);max-width:calc(100vw - 16px); }
+    .toolbar { grid-column:1;grid-row:1;display:grid;grid-template-columns:1fr 1fr;height:auto;gap:5px;margin-bottom:10px; }
+    .toolbar button { width:100%;min-height:32px; }
+    #hud { grid-column:1;grid-row:2;margin:0;padding:6px; }
+    .arena { grid-column:2;grid-row:1 / span 3;width:calc((100dvh - 20px) * .625); }
+    .perf {grid-column:1;grid-row:3;max-width:150px;align-self:start;margin-top:10px;}
+    #hud[data-mode="greed"] #hud-energy-label {white-space:normal;max-width:46px;line-height:10px;}
+}

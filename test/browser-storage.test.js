@@ -26,7 +26,7 @@ function browser(storage, options={}) {
     }
     const getElement=selector=>{
         if(!elements.has(selector)){
-            const node=new Element(['#mute','#restart','#resume','#skip-death','#open-nest','#result-nest','#close-nest','#open-courses','#close-courses','#practice','#next-course','#new-marathon'].includes(selector)?'button':'div');
+            const node=new Element(['#play-greed','#mute','#restart','#resume','#skip-death','#open-nest','#result-nest','#close-nest','#open-courses','#close-courses','#practice','#next-course','#new-marathon'].includes(selector)?'button':'div');
             node.id=selector.slice(1);node.hidden=['#result','#pause','#upgrade','#nest','#courses','#next-course','#new-marathon','#skip-death'].includes(selector);elements.set(selector,node);
         } return elements.get(selector);
     };
@@ -43,7 +43,7 @@ function browser(storage, options={}) {
 
 test('legacy points and existing profile survive reload; new results report course progress',()=>{
  const storage=storageWith({best:'22',bestScore:'12'}),page=browser(storage);
- assert.equal(page.run('profileStore.value.legacyBest'),22);page.run('jump();game.score=24;game.collected=5;game.finish()');
+ assert.equal(page.run('profileStore.value.legacyBest'),22);page.run("selectCourse('press');jump();game.score=24;game.collected=5;game.finish()");
  assert.equal(storage.data.get('bestScore'),'24');assert.equal(page.elements.get('#result').hidden,true);
  page.run('for(let i=0;i<30;i++)game.update()');assert.equal(page.elements.get('#score').textContent,'0% trasy');assert.equal(JSON.parse(storage.data.get(PROFILE_KEY)).crumbs,5);
 });
@@ -64,7 +64,7 @@ test('pre-run course selection respects unlocks and style selection persists',()
  page.elements.get('#open-nest').click();page.elements.get('#run-styles').children[1].click();page.elements.get('#close-nest').click();page.run('jump()');assert.equal(page.run('game.style.id'),'collector');
 });
 test('training result hides normal results behind nest and does not overwrite saved rewards',()=>{
- const storage=storageWith(),page=browser(storage);page.run('jump();game.finish();for(let i=0;i<30;i++)game.update()');
+ const storage=storageWith(),page=browser(storage);page.run("selectCourse('press');jump();game.finish();for(let i=0;i<30;i++)game.update()");
  page.elements.get('#open-nest').click();assert.equal(page.elements.get('#result').hidden,true);page.elements.get('#close-nest').click();assert.equal(page.elements.get('#result').hidden,false);
  const coins=page.run('profileStore.value.crumbs');page.elements.get('#practice').click();page.run('game.finish();for(let i=0;i<30;i++)game.update()');assert.equal(page.run('profileStore.value.crumbs'),coins);assert.equal(page.elements.get('#result-title').textContent,'Trening');
  page.elements.get('#restart').click();assert.equal(page.run('game.practice'),false);assert.equal(page.run('game.state'),'playing');
@@ -83,4 +83,15 @@ test('audio voices including music are bounded and pause and mute stop them',()=
  const p=browser(storageWith(),{AudioContext});p.run("jump();game.activate('invincible');syncShieldHum();syncMusic();for(let i=0;i<40;i++)play('shatter-heavy')");assert.ok(p.run('arcadeVoices.size')<=16);
  p.elements.get('#mute').click();assert.equal(p.run('arcadeVoices.size'),0);assert.equal(p.run('shieldHum'),null);
  p.elements.get('#mute').click();p.run("play('feather');setPaused(true)");assert.equal(p.run('arcadeVoices.size'),0);assert.ok(nodes.every(n=>n.stopped));
+});
+
+test('greed is the migrated default, has a compact score result and keeps challenge settings out of its nest',()=>{
+ const storage=storageWith({bestScore:'237',[PROFILE_KEY]:JSON.stringify({version:1,selectedCourse:'press',crumbs:500})}),p=browser(storage);
+ assert.equal(p.run('game.isGreed'),true);assert.equal(p.run('profileStore.value.crumbs'),500);
+ p.elements.get('#open-nest').click();assert.equal(p.elements.get('#challenge-options').hidden,true);p.elements.get('#close-nest').click();
+ p.run('jump();game.collectCookie();game.finish();for(let i=0;i<30;i++)game.update()');
+ assert.equal(p.elements.get('#score').textContent,'1 pkt');assert.equal(p.elements.get('#best').textContent,'Rekord: 1 pkt');
+ assert.equal(p.elements.get('#practice').hidden,true);assert.equal(p.elements.get('#earned').hidden,true);assert.equal(storage.data.get('bestScore'),'237');
+ p.elements.get('#open-courses').click();p.elements.get('#course-items').children[0].click();p.elements.get('#open-nest').click();assert.equal(p.elements.get('#challenge-options').hidden,false);
+ p.elements.get('#close-nest').click();p.elements.get('#play-greed').click();assert.equal(p.run('game.isGreed'),true);
 });

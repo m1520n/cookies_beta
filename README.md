@@ -1,6 +1,6 @@
 # Ciastkobranie
 
-Arcade jednym przyciskiem, napisane w JavaScript i Canvas 2D. Ucz się rytmu krótkich tras, wybieraj cechy torem lotu i łącz je ze zdolnością. Lot nie zatrzymuje się na wybory.
+Arcade jednym przyciskiem, napisane w JavaScript i Canvas 2D. Główny tryb **Łasuch**: zbieraj, utrzymuj serię, przygotuj Szał i przez chwilę poluj na przeszkody. Dotychczasowe trasy i Maraton pozostają w menu **Wyzwania**.
 
 ## Uruchomienie
 
@@ -13,6 +13,23 @@ npm test
 Bez zależności i budowania. Python 3 do serwera, Node.js 18+ do testów. Moduły wymagają HTTP; gra nadaje się do GitHub Pages.
 
 Klik / dotyk / spacja — skok. Esc — pauza. Ukrycie karty zatrzymuje grę. Śmierć ma krótki hitstop i zwolniony upadek: 0,35 s dla prób krótszych niż 15 s, potem 0,7 s. Już po 0,12 s świeże naciśnięcie rozpoczyna rewanż, bez obowiązkowego ekranu wyników.
+
+## Łasuch — główny tryb
+
+Lot bez końca, po osobny rekord. Sterowanie i fizyka pozostają takie same jak w Wyzwaniach. W tym prototypie każdy startuje z równymi parametrami: bez kart, stylów, losowych power-upów, zakupionych ulepszeń i pióra. Wybrany wygląd ptaka nadal działa.
+
+- Zwykłe ciastko: 1 punkt bazowy i 1 ładunek. Złote: 3 punkty bazowe i 2 ładunki. Złota okazja pojawia się, gdy środek aktywnej przeszkody jest 70–120 jednostek od środka ciastka. Zmienia kolor i obwódkę, bez zmiany położenia.
+- Ciastka utrzymują serię przez 4 s; każde trzecie podnosi mnożnik, maksymalnie do ×4. Wygaśnięcie zeruje serię, ale zachowuje wynik. Bliski unik nie daje punktów ani energii; odświeża istniejącą serię.
+- Cztery ładunki przygotowują **Szał**. Dopiero następne ciastko go uruchamia. Gotowość czeka na gracza.
+- Szał trwa 3 s: ciastka dają punkty ×2, kontakt rozbija przeszkody za 2 punkty bazowe × mnożnik serii i odnawia czas serii. Kolce nadal zabijają.
+- W czasie Szału nie ma złotych okazji ani ładowania kolejnego Szału. Następnie 4 s przerwy przed ładowaniem. Mocy nie można kumulować lub przedłużać.
+- HUD: wynik, zegar serii, mnożnik i cztery segmenty Szału. Wynik końcowy zawiera punkty, rekord i rewanż; bez listy statystyk.
+- Pierwsze 15 s: kule; następne 15 s: rykoszety; kolejne 15 s: wahadła. Potem mieszane sektory po 15 s. Odstęp wejść 2,5 / 2,5 / 2,25 / 2 s, później stały; maksymalnie trzy zagrożenia. Świat płynnie trwa przez zmianę sektora, bez komunikatów o levelach.
+- Każde fizyczne ciastko daje jeden okruch; złoty bonus, mnożniki, rozbicia i przeżyte sektory nie mnożą waluty. Śmierć nie zabiera zarobionych okruchów. Rewanż zachowuje ziarno.
+
+Dotychczasowy profil jest migrowany raz do domyślnego Łasucha. Późniejszy wybór Wyzwania jest zapamiętywany. Historyczne rekordy, portfel, zakupy i odblokowania pozostają zachowane; rekord Łasucha jest osobny i niezależny od stylu. W metrykach ostatniej rundy zapisują się także złote ciastka, rozbicia i czas pierwszego Szału, lokalnie i bez wysyłania danych.
+
+Dalsze sekcje opisują **Wyzwania**; ich moce, cechy, ulepszenia i nagrody sektorowe nie obowiązują w Łasuchu.
 
 ## Trasy i nauka
 
@@ -87,12 +104,12 @@ Syntezowany rytm 120 BPM podąża za zegarem trasy, także przy spowolnieniu. Ni
 - `?seed=123`: powtarzalny Maraton.
 - `?debug=1`: promienie kolizji.
 
-Testy obejmują harmonogramy, tysiąc ziaren Maratonu, ciągłość sektorów, limity kombinacji, moce, trening, zapis i migrację oraz kontroler przeglądarkowy. Wyszukiwanie sekwencji skoków wyznacza przejście każdej krótkiej trasy; odtworzenie w rzeczywistym modelu sprawdza je dla trzech stylów bez przesuwania ptaka lub usuwania przeszkód. Potwierdza osiągalność, nie subiektywną trudność ani przyjemność gry.
+Testy obejmują harmonogramy, tysiąc ziaren Maratonu, ciągłość sektorów, limity kombinacji, moce, trening, zapis i migrację oraz kontroler przeglądarkowy. Wyszukiwanie sekwencji skoków wyznacza przejście każdej krótkiej trasy; odtworzenie w rzeczywistym modelu sprawdza je dla trzech stylów bez przesuwania ptaka lub usuwania przeszkód. Osobne wyszukiwanie wejść odtwarza w rzeczywistym modelu Łasucha zebranie złotej okazji, uruchomienie Szału i rozbicie zaplanowanej przeszkody; dla ziarna 42 pierwsza moc wystąpiła po około 4,2 s, a pełna pętla po 5,4 s. Testy potwierdzają osiągalność, nie subiektywną trudność ani przyjemność gry. Po pięciu próbach należy ocenić, czy gracz szuka okazji, wyczekuje Szału i ma pomysł na kolejny rewanż.
 
-Cel 60 fps wymaga 60 wywołań od przeglądarki. W użytym środowisku także pusta strona otrzymywała około 30; nie deklarujemy pomiaru 60 fps. Balans i czytelność w szybkiej grze wymagają dalszego ogrania przez człowieka.
+Fizyka pozostaje przy 60 Hz niezależnie od częstotliwości renderowania. Wcześniejsza sesja przeglądarki dostarczała około 30 fps; po zmianie środowiska podgląd Łasucha pokazywał około 120 fps. Wynik nie stanowi gwarancji dla innych urządzeń. Balans i czytelność w szybkiej grze wymagają dalszego ogrania przez człowieka.
 
 ## Pliki
 
 `courses.js` — trasy i układy ciastek; `director.js` — harmonogram wejść; `obstacles.js` — trajektorie; `game-model.js` — fizyka i reguły; `progression.js` — profil; `game.js` — sterowanie, dźwięk i Canvas; `test/helpers/reachability.js` — wyszukiwanie przejść.
 
-Gałęzie: `codex/arcade-checkpoint` zachowuje poprzedni prototyp, `codex/mastery-sectors` zawiera tę iterację. Główna gałąź pozostaje bez zmian.
+Gałęzie: `codex/arcade-checkpoint` zachowuje wcześniejszy prototyp, `codex/mastery-sectors` trasy i sektory, a `codex/greed-arcade` główny tryb Łasuch. Główna gałąź pozostaje bez zmian.
