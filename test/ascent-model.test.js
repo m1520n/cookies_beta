@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {FactoryGame} from '../ascent-model.js';import {STEP} from '../game-model.js';
-import {GATE_Y,GATE_HEIGHT,AscentDirector} from '../ascent-world.js';import {makeObstacle,obstacleAt} from '../obstacles.js';
+import {GATE_Y,GATE_HEIGHT,AscentDirector} from '../ascent-world.js';import {makeObstacle,obstacleAt,moveObstacle} from '../obstacles.js';
 import {findAscentWitness} from './helpers/ascent-reachability.js';
 const start=options=>{const g=new FactoryGame({mode:'ascent',seed:42,...options});g.press();return g;};
 
@@ -36,7 +36,7 @@ test('the world and cookie survive opening while existing trajectories keep thei
 });
 test('height entrances cannot repeat or refill a destroyed slot and boss attacks retain their clock',()=>{
  const director=new AscentDirector(1,42),scene={maxHeight:800,cameraTop:-736,balls:[],elapsed:0,courseTime:0,machine:{awake:false,broken:false}};
- assert.ok(director.due(scene).length<=3);assert.deepEqual(director.due(scene),[]);
+ const entries=director.due(scene);assert.equal(entries.length,3);for(const event of entries){assert.equal(event.cameraEntry,true);assert.equal(event.y,scene.cameraTop-50);}assert.deepEqual(director.due(scene),[]);
  scene.machine.awake=true;assert.deepEqual(director.due(scene),[]);scene.elapsed=1.2;scene.courseTime=1.2;assert.equal(director.due(scene).length,1);
  assert.deepEqual(director.due(scene),[]);scene.elapsed=3.6;assert.deepEqual(director.due(scene),[]);scene.elapsed=3.7;assert.equal(director.due(scene).length,1);
 });
@@ -46,4 +46,26 @@ test('real input replay climbs, collects six cookies, breaks the core and reache
  for(const input of inputs){if(input)g.press();g.update();assert.equal(g.state,'playing');assert.ok(g.cameraTop<=top);top=g.cameraTop;assert.ok(g.balls.length<=3);}
  assert.equal(g.machine.broken,true);assert.equal(g.floor,2);assert.ok(g.maxHeight>GATE_HEIGHT);assert.deepEqual(discoveries,[2]);
  assert.ok(g.collected>=6);assert.ok(g.metrics.abilities>0);assert.ok(g.balls.some(b=>b.wind));
+});
+
+test('pending entries track the upper edge through a fast climb, then keep their world origin',()=>{
+ const b=makeObstacle({id:'entry',kind:'heavy',at:0,x:60,y:-50,world:true,cameraEntry:true});
+ for(let frame=0;frame<60;frame++){
+  const top=-frame*8;moveObstacle(b,frame*STEP,top);
+  assert.equal(b.originY,top-50);assert.equal(b.y,top-50);assert.equal(b.launched,false);
+ }
+ moveObstacle(b,1,-480);assert.equal(b.launched,true);assert.equal(b.y,-530);
+ const origin=b.originY;moveObstacle(b,1+STEP,-580);
+ assert.equal(b.originY,origin);assert.ok(b.y>origin);
+
+});
+test('constant rapid flaps cannot bypass ventilation, including an active entry frenzy',()=>{
+ for(const frenzy of [0,3])for(const rate of [12,30,60])for(let seed=1;seed<=100;seed++){
+  const g=start({seed,profile:{ascentUnlocked:[1,2],ascentStart:2}});g.abilityRemaining=frenzy;
+  for(let frame=0;frame<30*60&&g.state==='playing';frame++){
+   if(frame%(60/rate)===0)g.press();g.update();assert.ok(g.balls.length<=3);
+  }
+  assert.equal(g.state,'dying',`seed ${seed}, ${rate} flaps/s, frenzy ${frenzy}`);
+  assert.equal(g.cause,'ball');
+ }
 });

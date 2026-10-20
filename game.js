@@ -1,10 +1,10 @@
-import {FactoryGame as Game} from './ascent-model.js?v=ascent3';
-import {GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey} from './ascent-world.js?v=ascent3';
-import { WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from './game-model.js?v=ascent3';
-import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock } from './progression.js?v=ascent3';
+import {FactoryGame as Game} from './ascent-model.js?v=ascent4';
+import {GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey} from './ascent-world.js?v=ascent4';
+import { WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from './game-model.js?v=ascent4';
+import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock } from './progression.js?v=ascent4';
 
-import {COURSES,GREED,sectorDuration} from './courses.js?v=ascent3';
-import {OBSTACLES,obstacleAt} from './obstacles.js?v=ascent3';
+import {COURSES,GREED,sectorDuration} from './courses.js?v=ascent4';
+import {OBSTACLES,obstacleAt} from './obstacles.js?v=ascent4';
 
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d', { alpha: false });

@@ -25,13 +25,13 @@ Pozycje ptaka, ciastek, maszyny, cząstek i zagrożeń pozostają we współrzę
 
 Przed prasą podajnik wystawia ciastka naprzemiennie po bokach komory, bez limitu. Pominięcie wcześniejszych ciastek nie blokuje postępu. Widoczne ciastko nigdy nie teleportuje się; nowe zastępuje pominięte dopiero po opuszczeniu widoku z marginesem. Zmiana piętra zachowuje istniejące obiekty i zegary.
 
-Wejścia przeszkód aktywuje osiągnięta wysokość; każdy segment uruchamia się raz. Jednocześnie najwyżej trzy przeszkody, pełna sekundowa zapowiedź. Zniszczenie obiektu nie powtarza wejścia; strzały prasy mają osobny stały zegar. Obiekty usuwa się po opuszczeniu widoku z marginesem albo wygaśnięciu czasu przelotu.
+Wejścia przeszkód aktywuje osiągnięta wysokość; każdy segment uruchamia się raz. Jednocześnie najwyżej trzy przeszkody, pełna sekundowa zapowiedź. Podczas zapowiedzi wejście śledzi górną krawędź kamery; kula startuje znad ekranu dopiero po jej zakończeniu, a później zachowuje stały początek toru w świecie. Szybkie skoki nie pozwalają wyprzedzić ostrzeżenia. Zniszczenie obiektu nie powtarza wejścia; strzały prasy mają osobny stały zegar. Obiekty usuwa się po opuszczeniu widoku z marginesem albo wygaśnięciu czasu przelotu.
 
 Fabryka używa zasad Szału i serii opisanych poniżej dla Łasucha. Każdy zaczyna z pustą energią, bez zakupionych ułatwień, pióra, kart i stylów. Wygląd pozostaje wybrany przez gracza. Odkrytą Wentylatornię można wybrać jako początek nowej próby; start jest na wysokości 1320 jednostek (66 m), z pustą energią i serią. Rekord wysokości i punktów jest oddzielny dla każdego miejsca startu. Jeden fizyczny przedmiot to jeden okruch; brak nagród sektorowych.
 
 Nowy tryb ma identyfikator `ascent`; `ascent-model.js` rozszerza dotychczasowy model, a `ascent-world.js` opisuje miejsca, gródź i wejścia zagrożeń. Profil `ciastkobranie.profile.v1` dostaje addytywne pola `ascentUnlocked`, `ascentStart`, `ascentIntroduced` oraz rekordy `ascent:1` i `ascent:2`. Odkrycie zapisuje się natychmiast, rozliczenie ciastek po porażce pozostaje jednorazowe. Stare rekordy, zakupy, portfel i odblokowania są zachowane. Przejście na domyślną Fabrykę następuje raz; późniejszy wybór innego trybu jest zapamiętywany.
 
-Testy odtwarzają rzeczywiste skoki: dla ziarna 42 sześć ciastek, Szał, trafienie rdzenia po około 5,7 s i wejście do Wentylatorni po około 6,1 s, bez przesuwania ptaka lub podmieniania obiektów. To potwierdza osiągalność; tempo, czytelność i przyjemność odkrywania wymagają ogrania przez człowieka. Pierwszy prototyp ma jedną maszynę i dwa obszary, bez dalszych zamkniętych obietnic na mapie.
+Testy odtwarzają rzeczywiste skoki: dla ziarna 42 sześć ciastek, Szał, trafienie rdzenia i wejście do Wentylatorni, bez przesuwania ptaka lub podmieniania obiektów. To potwierdza osiągalność; tempo, czytelność i przyjemność odkrywania wymagają ogrania przez człowieka. Pierwszy prototyp ma jedną maszynę i dwa obszary, bez dalszych zamkniętych obietnic na mapie.
 
 ## Łasuch — poprzedni tryb arcade
 

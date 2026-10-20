@@ -11,24 +11,23 @@ export class AscentDirector {
     configure(){return {name:'Fabryka'};}
     due(game){
         const events=[],lanes=[60,294,114,240];let slots=3-game.balls.length;
-        const add=(id,kind,height,index,wind=0)=>{
-            const y=320-height;
-            if(slots<=0 || y>game.cameraTop+736)return;
+        const add=(id,kind,index,wind=0)=>{
+            if(slots<=0)return;
             const lane=lanes[(index+(this.seed>>>0)%2)%lanes.length];
-            events.push({id,kind,x:kind==='pendulum'?(lane<177?88:266):lane,at:game.courseTime,y,world:true,wind});slots--;
+            events.push({id,kind,x:kind==='pendulum'?(lane<177?88:266):lane,at:game.courseTime,y:game.cameraTop-50,world:true,wind,cameraEntry:true});slots--;
         };
         const triggers=[120,420,720];
         if(this.startFloor===1)while(this.cursor<triggers.length && game.maxHeight>=triggers[this.cursor]){
-            const i=this.cursor++;add(`press:${i}`,'heavy',triggers[i]+320,i);
+            const i=this.cursor++;add(`press:${i}`,'heavy',i);
         }
         if(game.machine.awake && !game.machine.broken){
             this.nextShot??=game.elapsed+1.2;
             if(game.elapsed>=this.nextShot){
-                this.nextShot+=2.5;const i=this.shots++;add(`machine:${i}`,'heavy',GATE_HEIGHT-65,i);
+                this.nextShot+=2.5;const i=this.shots++;add(`machine:${i}`,'heavy',i);
             }
         }
         if(game.machine.broken)while(game.maxHeight>=VENT_START+this.ventCursor*400){
-            const i=this.ventCursor++;add(`vent:${i}`,['heavy','ricochet','pendulum'][i%3],VENT_START+i*400+320,i,i%2?1:-1);
+            const i=this.ventCursor++;add(`vent:${i}`,['heavy','ricochet','pendulum'][i%3],i,i%2?1:-1);
         }
         return events;
     }

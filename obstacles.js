@@ -20,12 +20,17 @@ export function obstacleAt(ball, time) {
 export function makeObstacle(event, time=event.at) {
     const spec=OBSTACLES[event.kind];
     const ball={id:event.id,kind:event.kind,originX:event.x,spawnAt:event.at,warningDuration:1,
-        originY:event.y??-50,world:Boolean(event.world),wind:event.wind||0,
+        originY:event.y??-50,world:Boolean(event.world),wind:event.wind||0,cameraEntry:Boolean(event.cameraEntry),launched:!event.cameraEntry,
         vx:event.kind==='ricochet' ? (event.x<177 ? spec.vx : -spec.vx) : 0,vy:spec.vy,
         radius:spec.radius,color:spec.color,rotation:0,nearDistance:Infinity,nearAwarded:false,contacted:false,broken:false,weak:false};
     return Object.assign(ball,obstacleAt(ball,time));
 }
-export function moveObstacle(ball,time) {
+export function moveObstacle(ball,time,cameraTop) {
+    // A warning belongs to the top edge. Only launched hazards have a fixed world origin.
+    if(ball.cameraEntry && !ball.launched && Number.isFinite(cameraTop)){
+        ball.originY=cameraTop-50;
+        if(time>=ball.spawnAt+ball.warningDuration-1e-7)ball.launched=true;
+    }
     Object.assign(ball,obstacleAt(ball,time));ball.rotation=ball.age*(ball.kind==='ricochet' ? 5 : 3);
 }
 export function obstacleAlive(ball,cameraTop) {return !ball.broken && (ball.world ? ball.age<6 && (cameraTop===undefined || ball.y<cameraTop+736) : ball.y<686) && ball.x>-46 && ball.x<400;}

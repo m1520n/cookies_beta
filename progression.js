@@ -1,4 +1,4 @@
-import {COURSES} from './courses.js?v=ascent3';
+import {COURSES} from './courses.js?v=ascent4';
 // Run traits occupy at most three slots; legacy unlock IDs remain stable.
 export const CARDS = [
     { id:'battery', name:'Bateria', symbol:'ϟ', description:'Energia do aktywacji: 5 / 4 zamiast 6.', max:2, color:'#ffd78f' },

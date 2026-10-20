@@ -1,6 +1,6 @@
-import {Game,STEP} from './game-model.js?v=ascent3';
-import {makeObstacle,moveObstacle,obstacleAlive} from './obstacles.js?v=ascent3';
-import {AscentDirector,GATE_Y,GATE_HEIGHT,VENT_START,heightAt,floorName} from './ascent-world.js?v=ascent3';
+import {Game,STEP} from './game-model.js?v=ascent4';
+import {makeObstacle,moveObstacle,obstacleAlive} from './obstacles.js?v=ascent4';
+import {AscentDirector,GATE_Y,GATE_HEIGHT,VENT_START,heightAt,floorName} from './ascent-world.js?v=ascent4';
 const FRENZY={id:'ascent',name:'Szał',symbol:'✦',color:'#ffb74f'};
 
 // The previous modes keep their original model. Only the factory uses world coordinates.
@@ -94,7 +94,7 @@ export class FactoryGame extends Game {
             this.floor=2;this.stage={name:floorName(2)};this.onFeedback({type:'floor',title:'WENTYLATORNIA'});this.onSound('stage');
         }
         for(const ball of this.balls){
-            if(ball.broken)continue;moveObstacle(ball,this.courseTime);
+            if(ball.broken)continue;moveObstacle(ball,this.courseTime,this.cameraTop);
             if(ball.wait>0||!obstacleAlive(ball,this.cameraTop))continue;
             const d=Math.hypot(bird.x+28-ball.x-23,bird.y+29-ball.y-22);
             if(d<22+ball.radius){ball.contacted=true;if(this.shielded)this.shatterBall(ball);else{this.finish('ball',ball);return;}}
