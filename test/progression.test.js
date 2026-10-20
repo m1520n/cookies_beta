@@ -120,3 +120,12 @@ test('ascent discoveries survive death and records are separate by starting floo
  assert.equal(reload.value.records['ascent:2'].height,1800);assert.equal(reload.value.records['ascent:1'].height,0);assert.equal(reload.value.records.greed.score,237);
  assert.equal(reload.value.lastRun.mode,'ascent');assert.equal(reload.value.lastRun.metrics.cause,'fall');assert.equal(reload.settle({...run('factory'),mode:'ascent'}).awarded,false);
 });
+
+
+test('room route preserves legacy ascent records and unlocks boiler without permanent power',()=>{
+ const storage=memory();storage.setItem(PROFILE_KEY,JSON.stringify({version:1,crumbs:123,ascentUnlocked:[1,2],ascentStart:2,records:{'ascent:2':{height:9900,score:88}}}));
+ const store=new ProfileStore(storage);assert.equal(store.value.crumbs,123);assert.equal(store.value.records['ascent:2'].height,9900);assert.equal(store.value.records['ascent-rooms:2'].height,0);
+ assert.equal(store.discoverFloor(3),true);assert.equal(store.setStartFloor(3),true);
+ store.settle({...run('rooms-new',4,12),mode:'ascent',routeVersion:2,startFloor:3,height:5700,score:12,metrics:{cause:'structure'}});
+ const again=new ProfileStore(storage);assert.equal(again.value.ascentStart,3);assert.ok(again.value.ascentUnlocked.includes(3));assert.equal(again.value.records['ascent-rooms:3'].height,5700);assert.equal(again.value.records['ascent:2'].score,88);assert.equal(again.value.lastRun.metrics.cause,'structure');
+});

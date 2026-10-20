@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import {FactoryGame as Game} from '../ascent-model.js';
-import {GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey} from '../ascent-world.js';
+import {GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey,gateY,gateHeight,floorBase,roomGeometry} from '../ascent-world.js';
 import { WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from '../game-model.js';
 import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock, PROFILE_KEY } from '../progression.js';
 import {COURSES,GREED,sectorDuration} from '../courses.js';
@@ -13,6 +13,7 @@ function storageWith(values={}) { const data=new Map(Object.entries(values)); re
 function browser(storage, options={}) {
     const elements=new Map(); const documentHandlers={}; let time=1000; let raf;
     const ctx=new Proxy({}, {get:(target,key)=>target[key]??(()=>{}),set:(target,key,value)=>(target[key]=value,true)});
+    ctx.createLinearGradient=ctx.createRadialGradient=()=>({addColorStop(){}});
     ctx.arc=(x,y,radius)=>assert.ok(Number.isFinite(radius)&&radius>=0,'Canvas circle must have a finite nonnegative radius');
     class Element {
         constructor(tag='div') { this.tag=tag;this.hidden=false;this.disabled=false;this.textContent='';this.attributes={};this.handlers={};this.children=[];this.style={setProperty(){}}; }
@@ -29,15 +30,16 @@ function browser(storage, options={}) {
     }
     const getElement=selector=>{
         if(!elements.has(selector)){
-            const node=new Element(['#start-press','#start-vent','#return-map','#play-greed','#mute','#restart','#resume','#skip-death','#open-nest','#result-nest','#close-nest','#open-courses','#close-courses','#practice','#next-course','#new-marathon'].includes(selector)?'button':'div');
+            const node=new Element(['#start-press','#start-vent','#start-boiler','#return-map','#play-greed','#mute','#restart','#resume','#skip-death','#open-nest','#result-nest','#close-nest','#open-courses','#close-courses','#practice','#next-course','#new-marathon'].includes(selector)?'button':'div');
             node.id=selector.slice(1);node.hidden=['#floor-picker','#result','#pause','#upgrade','#nest','#courses','#next-course','#new-marathon','#skip-death'].includes(selector);elements.set(selector,node);
         } return elements.get(selector);
     };
     const document={querySelector:getElement,createElement:tag=>new Element(tag),addEventListener:(name,callback)=>documentHandlers[name]=callback};
     const sandbox=vm.createContext({
-        Game,WIDTH,HEIGHT,STEP,cookieWord,POWERUPS,ProfileStore,NEST_UPGRADES,CARDS,STYLES,LOOKS,unlockedLooks,unlockedCourses,nextUnlock,COURSES,GREED,sectorDuration,GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey,OBSTACLES,obstacleAt,localStorage:storage,
+        Game,WIDTH,HEIGHT,STEP,cookieWord,POWERUPS,ProfileStore,NEST_UPGRADES,CARDS,STYLES,LOOKS,unlockedLooks,unlockedCourses,nextUnlock,COURSES,GREED,sectorDuration,GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey,gateY,gateHeight,floorBase,roomGeometry,OBSTACLES,obstacleAt,localStorage:storage,
         document,window:{AudioContext:options.AudioContext,addEventListener(){},devicePixelRatio:2,matchMedia:()=>({matches:options.reducedMotion||false,addEventListener(){}})},
         performance:{now:()=>time},Audio:class{play(){return Promise.resolve();}pause(){}},
+        spriteCookie:[{draw(){}}],spriteBird:Array.from({length:8},()=>({draw(){}})),
         Image:class{set src(value){this.onload();}},initSprites(){},requestAnimationFrame:callback=>raf=callback,
     });
     vm.runInContext(source,sandbox);
@@ -105,11 +107,17 @@ test('factory map unlocks immediately and starts ventilation with separate recor
  p.run('jump();game.machine.awake=true;game.abilityRemaining=1;game.breakMachine();game.finish();for(let i=0;i<50;i++)game.update()');
  assert.equal(p.elements.get('#return-map').hidden,false);assert.deepEqual(JSON.parse(storage.data.get(PROFILE_KEY)).ascentUnlocked,[1,2]);
  p.elements.get('#return-map').click();assert.equal(p.elements.get('#start-vent').disabled,false);p.elements.get('#start-vent').click();
- assert.equal(p.run('game.startFloor'),2);p.run('jump()');assert.equal(p.run('game.energy'),0);assert.equal(p.run('game.maxHeight'),1320);
+ assert.equal(p.run('game.startFloor'),2);p.run('jump()');assert.equal(p.run('game.energy'),0);assert.equal(p.run('game.maxHeight'),1920);
  const reloaded=browser(storage);assert.equal(reloaded.run('game.startFloor'),2);
 });
 
 test('the extended machine explosion renders valid rings for its entire lifetime',()=>{
  const p=browser(storageWith());p.run("jump();addFeedback({type:'machine-break',x:200,y:-880});drawFeedback();for(let i=0;i<60;i++){updateFeedback();drawFeedback();}");
  assert.equal(p.run('feedback.rings.length'),0);
+});
+
+test('all three room floors render with shared geometry and a compact route HUD',()=>{
+ const p=browser(storageWith());p.run("profileStore.discoverFloor(2);profileStore.discoverFloor(3)");
+ for(const floor of [1,2,3]){p.run(`profileStore.setStartFloor(${floor});selectCourse('ascent');jump();for(let i=0;i<30;i++)game.update();draw();drawHud()`);assert.equal(p.elements.get('.progress-track').hidden,true);assert.equal(p.elements.get('#hud-combo').textContent,'');}
+ p.run("game.finish();for(let i=0;i<50;i++)game.update();selectCourse('ascent')");assert.equal(p.elements.get('#start-boiler').disabled,false);
 });

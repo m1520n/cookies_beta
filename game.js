@@ -1,10 +1,10 @@
-import {FactoryGame as Game} from './ascent-model.js?v=ascent4';
-import {GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey} from './ascent-world.js?v=ascent4';
-import { WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from './game-model.js?v=ascent4';
-import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock } from './progression.js?v=ascent4';
+import {FactoryGame as Game} from './ascent-model.js?v=rooms3';
+import {GATE_HEIGHT,floorName,ascentRecordKey,gateY,floorBase,roomGeometry} from './ascent-world.js?v=rooms3';
+import { WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from './game-model.js?v=rooms3';
+import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock } from './progression.js?v=rooms3';
 
-import {COURSES,GREED,sectorDuration} from './courses.js?v=ascent4';
-import {OBSTACLES,obstacleAt} from './obstacles.js?v=ascent4';
+import {COURSES,GREED,sectorDuration} from './courses.js?v=rooms3';
+import {OBSTACLES,obstacleAt} from './obstacles.js?v=rooms3';
 
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d', { alpha: false });
@@ -79,9 +79,9 @@ motionPreference?.addEventListener('change', resetFeedback);
 
 function addFeedback(event) {
     if(event.type==='machine-awake'){announcement.textContent='Prasa obudzona. Traf rdzeń podczas Szału.';if(!motionPreference?.matches)arcadeImpact(3,'#ffb74f');return;}
-    if(event.type==='floor'){announcement.textContent='Wentylatornia. Podmuchy zakrzywiają tory przeszkód.';feedback.banner={title:event.title,color:'#85dcca',remaining:1,notice:true};return;}
+    if(event.type==='floor'){announcement.textContent=event.title;feedback.banner={title:event.title,color:'#85dcca',remaining:1,notice:true};return;}
     if(event.type==='machine-break'){
-        announcement.textContent='Przejście otwarte. Wentylatornia odkryta na mapie.';
+        announcement.textContent=event.nextFloor<=3?`Przejście otwarte. ${floorName(event.nextFloor)} odkryta na mapie.`:'Nadbudowa otwarta.';
         feedback.banner={title:'PRZEJŚCIE OTWARTE',color:'#85dcca',remaining:1,notice:true};
         if(!motionPreference?.matches){arcadeImpact(14,'#ffcb75',.32);feedback.rings.push({x:event.x,y:event.y,color:'#ffd78f',remaining:.8,duration:.8,large:true});
             for(let i=0;i<32;i++){const angle=i*Math.PI*2/32;feedback.particles.push({x:event.x,y:event.y,vx:Math.cos(angle)*220,vy:Math.sin(angle)*180,size:5+i%7,angle,spin:4,remaining:1,color:i%2?'#85dcca':'#ffd78f',fragment:true});}feedback.particles=feedback.particles.slice(-100);}
@@ -375,7 +375,7 @@ const game = new Game({
         document.querySelector('#result-title').textContent=game.isAscent?'Jeszcze wyżej?':game.practice ? (game.won?'Fragment opanowany':'Trening') : game.won?'Trasa ukończona!':'Jeszcze jedna próba?';
         const progress=runProgress();
         document.querySelector('#score').textContent=game.isAscent?`${Math.floor(game.maxHeight/20)} m`:game.practice ? `${Math.floor(progress*100+1e-5)}% fragmentu` : pointsMode ? `${score} pkt` : `${Math.floor(progress*100+1e-5)}% trasy`;
-        document.querySelector('#best').textContent=game.isAscent?`Rekord: ${Math.floor(recordNow.height/20)} m · ${recordNow.score} pkt`:game.practice ? 'Trening bez nagród' : pointsMode ? `Rekord: ${game.isGreed?recordNow.score:Math.max(recordNow.score,profileStore.value.legacyBest)} pkt` : `Rekord: ${Math.floor(recordNow.progress*100+1e-5)}%`;
+        document.querySelector('#best').textContent=game.isAscent?`Rekord: ${Math.floor(recordNow.height/20)} m`:game.practice ? 'Trening bez nagród' : pointsMode ? `Rekord: ${game.isGreed?recordNow.score:Math.max(recordNow.score,profileStore.value.legacyBest)} pkt` : `Rekord: ${Math.floor(recordNow.progress*100+1e-5)}%`;
         document.querySelector('#run-detail').textContent=game.course.name;
         document.querySelector('#earned').textContent=game.practice?'':`+${settlement?.crumbs||0} okruchów`;
         practiceButton.disabled=!game.checkpoint;practiceButton.hidden=game.isGreed||game.won&&!game.practice;
@@ -450,7 +450,7 @@ practiceButton.addEventListener('click',()=>{clearRunView();game.startPractice()
 nextCourseButton.addEventListener('click',()=>{const next=COURSES[COURSES.findIndex(course=>course.id===game.course.id)+1];if(next)selectCourse(next.id);});
 document.querySelector('#play-greed').addEventListener('click',()=>selectCourse('ascent'));
  document.querySelector('#return-map').addEventListener('click',()=>selectCourse('ascent'));
- for(const [id,floor] of [['#start-press',1],['#start-vent',2]])document.querySelector(id).addEventListener('click',()=>{if(profileStore.setStartFloor(floor))selectCourse('ascent');});
+ for(const [id,floor] of [['#start-press',1],['#start-vent',2],['#start-boiler',3]])document.querySelector(id).addEventListener('click',()=>{if(profileStore.setStartFloor(floor))selectCourse('ascent');});
  document.querySelector('#open-courses').addEventListener('click',openCourses);
 document.querySelector('#close-courses').addEventListener('click',closeCourses);
 document.querySelector('#new-marathon').addEventListener('click',()=>{game.fixedSeed=undefined;game.retrySeed=undefined;selectCourse('marathon');});
@@ -502,11 +502,11 @@ function selectCourse(id){
 function closeCourses(){coursesPanel.hidden=true;lastPanelState='';syncPanels();if(game.state==='over')restartButton.focus();else canvas.focus();}
 function syncMap(){
     document.querySelector('#floor-picker').hidden=!(game.isAscent&&game.state==='ready'&&nestPanel.hidden&&coursesPanel.hidden);
-    const unlocked=profileStore.value.ascentUnlocked.includes(2);
-    document.querySelector('#start-vent').disabled=!unlocked;
-    document.querySelector('#start-press').setAttribute('aria-pressed',String(game.startFloor===1));
-    document.querySelector('#start-vent').setAttribute('aria-pressed',String(game.startFloor===2));
-    uiText('#vent-status',unlocked?'Odkryta · możesz zacząć tutaj':'Rozbij rdzeń prasy, żeby odkryć');
+    for(const [id,floor,status] of [['#start-press',1,null],['#start-vent',2,'#vent-status'],['#start-boiler',3,'#boiler-status']]){
+        const unlocked=profileStore.value.ascentUnlocked.includes(floor),button=document.querySelector(id);
+        button.disabled=!unlocked;button.setAttribute('aria-pressed',String(game.startFloor===floor));
+        if(status)uiText(status,unlocked?'Odkryta · możesz zacząć tutaj':floor===2?'Rozbij rdzeń prasy':'Rozbij rdzeń wentylatora');
+    }
 }
 function openCourses(){
     if(!['ready','over'].includes(game.state))return;profileStore.reload();nestPanel.hidden=true;result.hidden=true;
@@ -685,8 +685,9 @@ function drawFactoryBackground(){
         for(let x=60;x<360;x+=40){h.beginPath();h.moveTo(x,0);h.lineTo(x,640);h.stroke();}
     });
     ctx.drawImage(zone(false),0,0,400,640);
-    const blend=game.startFloor===2?1:game.machine.broken?Math.min(1,Math.max(0,(game.maxHeight-GATE_HEIGHT)/160)):0;
+    const blend=Math.min(1,Math.max(0,(game.maxHeight-GATE_HEIGHT)/120));
     if(blend){ctx.save();ctx.globalAlpha=motionPreference?.matches?1:blend;ctx.drawImage(zone(true),0,0,400,640);ctx.restore();}
+    const heat=Math.min(1,Math.max(0,(game.maxHeight-3720)/120));if(heat){ctx.fillStyle=`rgba(140,55,24,${heat*.26})`;ctx.fillRect(0,0,400,640);}
     for(let worldY=Math.floor(game.cameraTop/160)*160;worldY<game.cameraTop+640;worldY+=160){
         const y=worldY-game.cameraTop;ctx.strokeStyle='#9badc01c';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(32,y);ctx.lineTo(368,y);ctx.stroke();
         for(const x of [14,386]){ctx.fillStyle='#8d9ba6';ctx.fillRect(x-2,y-3,4,6);}
@@ -703,26 +704,64 @@ function drawFactoryBackground(){
             const x=60+((n*47+game.ticks*(i%2?1:-1))%280+280)%280;ctx.beginPath();ctx.moveTo(x,y-20+n*8);ctx.quadraticCurveTo(x+14,y-30+n*8,x+28,y-20+n*8);ctx.stroke();}ctx.restore();}
     }
 }
-function drawFactoryMachine(){
+function drawFactoryRooms(){
+    for(const room of game.director.nearby(game)){
+        const geo=roomGeometry(room,game.courseTime),top=320-room.start;
+        ctx.strokeStyle='#9bb6c430';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(30,top);ctx.lineTo(370,top);ctx.stroke();
+        for(const marker of geo.markers){
+            ctx.fillStyle='#344859';ctx.fillRect(marker.x-12,marker.y-22,24,44);
+            ctx.fillStyle=marker.warning?'#ffc46e':'#718a98';
+            for(let i=0;i<3;i++)ctx.fillRect(marker.x-8,marker.y-14+i*12,16,5);
+            if(marker.warning){ctx.save();ctx.strokeStyle='#ffc46e99';ctx.setLineDash([6,8]);ctx.beginPath();ctx.moveTo(25,marker.y);ctx.lineTo(375,marker.y);ctx.stroke();ctx.restore();}
+        }
+        for(const shape of geo.shapes){
+            if(shape.type==='circle'){
+                ctx.strokeStyle='#8da8b4';ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(200,shape.anchorY);ctx.lineTo(shape.x,shape.y);ctx.stroke();
+                ctx.fillStyle='#516575';ctx.strokeStyle='#d3b779';ctx.lineWidth=4;ctx.beginPath();ctx.arc(shape.x,shape.y,shape.r,0,Math.PI*2);ctx.fill();ctx.stroke();
+                ctx.fillStyle='#213544';ctx.beginPath();ctx.arc(shape.x,shape.y,12,0,Math.PI*2);ctx.fill();
+            }else if(shape.hot){
+                ctx.fillStyle='#eab99b55';ctx.fillRect(shape.x,shape.y,shape.w,shape.h);
+                ctx.strokeStyle='#ffe1bf';ctx.lineWidth=3;
+                for(let j=0;j<3;j++){ctx.beginPath();ctx.moveTo(shape.x,shape.y+5+j*8);ctx.lineTo(shape.x+shape.w,shape.y+5+j*8);ctx.stroke();}
+            }else{
+                ctx.fillStyle='#465967';ctx.fillRect(shape.x,shape.y,shape.w,shape.h);
+                ctx.fillStyle='#91a1a8';ctx.fillRect(shape.x,shape.y,shape.w,4);
+                ctx.save();ctx.beginPath();ctx.rect(shape.x,shape.y+shape.h-8,shape.w,8);ctx.clip();
+                ctx.fillStyle='#dfba6d';ctx.fillRect(shape.x,shape.y+shape.h-8,shape.w,8);ctx.strokeStyle='#23313f';ctx.lineWidth=8;
+                for(let x=shape.x-10;x<shape.x+shape.w+15;x+=22){ctx.beginPath();ctx.moveTo(x,shape.y+shape.h);ctx.lineTo(x+10,shape.y+shape.h-8);ctx.stroke();}ctx.restore();
+            }
+        }
+    }
+}
+
+function drawFactoryMachine(m){
+    const GATE_Y=gateY(m.floor);
     if(GATE_Y+125<game.cameraTop||GATE_Y-125>game.cameraTop+640)return;
-    const m=game.machine,opening=m.broken?(motionPreference?.matches?1:Math.min(1,(game.elapsed-(m.brokenAt??game.elapsed-1))/.65)):0;
-    const body=factoryLayer('press-body',h=>{
-        h.fillStyle='#080f1d';h.fillRect(0,20,400,135);h.fillStyle='#465260';h.fillRect(0,28,400,12);h.fillRect(0,140,400,9);
+    const opening=m.broken?(motionPreference?.matches?1:Math.min(1,(game.elapsed-(m.brokenAt??game.elapsed-1))/.65)):0;
+    const body=factoryLayer(`machine-body:${m.floor}`,h=>{
+        h.fillStyle='#080f1d';h.fillRect(0,20,400,135);h.fillStyle=['#465260','#376375','#705348'][m.floor-1];h.fillRect(0,28,400,12);h.fillRect(0,140,400,9);
         for(const x of [18,340]){h.fillStyle='#6a7883';h.fillRect(x,0,42,180);h.fillStyle='#b4c0c5';h.fillRect(x+7,0,6,180);h.fillStyle='#283744';h.fillRect(x+32,0,6,180);}
         h.strokeStyle='#a8b7c13d';h.lineWidth=1;for(let y=48;y<134;y+=16){h.beginPath();h.moveTo(68,y);h.lineTo(332,y);h.stroke();}
     },400,180);
     ctx.save();ctx.globalAlpha=1-opening*.55;ctx.drawImage(body,0,GATE_Y-90,400,180);ctx.restore();
+    if(m.floor===2){
+        ctx.save();ctx.translate(200,GATE_Y);ctx.rotate(motionPreference?.matches?0:game.ticks*.025);ctx.strokeStyle='#85dcca66';ctx.lineWidth=8;
+        for(let i=0;i<4;i++){ctx.rotate(Math.PI/2);ctx.beginPath();ctx.moveTo(35,0);ctx.quadraticCurveTo(85,-35,70,-8);ctx.stroke();}ctx.restore();
+    }else if(m.floor===3){
+        ctx.strokeStyle='#bf8c66';ctx.lineWidth=12;for(const x of [82,318]){ctx.beginPath();ctx.moveTo(x,GATE_Y+64);ctx.lineTo(x,GATE_Y-65);ctx.stroke();}
+        ctx.strokeStyle='#ffbe8266';ctx.lineWidth=3;ctx.beginPath();ctx.arc(200,GATE_Y,64,-Math.PI*.8,-Math.PI*.2);ctx.stroke();
+    }
     const gap=opening*202;
     ctx.fillStyle='#ad9b6a';ctx.fillRect(-gap,GATE_Y-9,172,18);ctx.fillRect(228+gap,GATE_Y-9,172,18);
     ctx.fillStyle='#1b2835';for(let x=0;x<400;x+=24){if(Math.abs(x-200)<32)continue;const dir=x<200?-1:1;ctx.fillRect(x+dir*gap,GATE_Y-5,13,10);}
     if(!m.broken){
-        const awake=m.awake,color=awake?'#ffb74f':'#6d7d89';
+        const awake=m!==game.machine||game.coreExposed,color=awake?'#ffb74f':'#6d7d89';
         if(awake&&!motionPreference?.matches)drawGlow(200,GATE_Y,'#ffb74f',108);
         ctx.fillStyle='#101c2d';ctx.strokeStyle=color;ctx.lineWidth=5;ctx.beginPath();ctx.arc(200,GATE_Y,28,0,Math.PI*2);ctx.fill();ctx.stroke();
         ctx.strokeStyle=awake?'#ffe2a0':'#425463';ctx.lineWidth=2;ctx.beginPath();ctx.arc(200,GATE_Y,18,0,Math.PI*2);ctx.stroke();
         if(awake){text('✦',200,GATE_Y+1,25,color,800);text('SZAŁ → RDZEŃ',200,GATE_Y-49,11,'#ffcf87',800);}
-        else{spriteCookie[0].draw(ctx,185,GATE_Y-10);text('ZBUDŹ PRASĘ',200,GATE_Y-49,11,'#aebdc9',800);}
-        for(let i=0;i<6;i++){ctx.fillStyle=i<m.cookies?'#ffc96c':'#273744';ctx.strokeStyle='#92a0ac66';ctx.lineWidth=1;ctx.beginPath();ctx.arc(125+i*30,GATE_Y+65,6,0,Math.PI*2);ctx.fill();ctx.stroke();}
+        else{ctx.fillStyle='#75828f';ctx.fillRect(177,GATE_Y-23,46,46);}
+
     } else {
         ctx.strokeStyle='#85dcca77';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(178,GATE_Y+10);ctx.lineTo(200,GATE_Y-12);ctx.lineTo(222,GATE_Y+10);ctx.stroke();
     }
@@ -800,10 +839,11 @@ function drawGlow(x, y, color, size = 80) {
 function currentRecord(){return profileStore.value.records[game.isAscent?ascentRecordKey(game.startFloor):game.isGreed?'greed':`${game.course.id}:${game.profile.runStyle}`];}
 function runProgress(){return game.practice?Math.max(0,Math.min(1,(game.courseTime-(game.practiceEnd-sectorDuration(game.course)))/sectorDuration(game.course))):game.progress;}
 function drawHud(){
+    document.querySelector('.progress-track').hidden=false;document.querySelector('#hud').setAttribute('data-factory',String(game.isAscent));
     const progress=runProgress();
     document.querySelector('#hud-best').hidden=false;document.querySelector('.progress-track').setAttribute('aria-label','Postęp trasy');
     const record=currentRecord();
-    if(game.isGreed){drawGreedHud();if(game.isAscent){uiText('#hud-score',`${Math.floor(game.maxHeight/20)} m`);uiText('#hud-course',game.floor===2?'Wentylatornia':game.machine.awake?'Rozbij rdzeń':`Tłocznia · ${game.machine.cookies}/6`);}return;}
+    if(game.isGreed){drawGreedHud();if(game.isAscent){uiText('#hud-score',`${Math.floor(game.maxHeight/20)} m`);uiText('#hud-course',floorName(game.floor));const room=game.currentRoom;const n=room?.index??(game.maxHeight<floorBase(game.floor)?0:3);uiText('#hud-percent',[0,1,2,3].map(i=>i===3?(i===n?'◆':'◇'):i<n?'●':i===n?'◉':'○').join('  '));document.querySelector('.progress-track').hidden=true;uiText('#hud-combo','');}return;}
     uiText('#hud-score',String(game.score));uiText('#hud-course',`${game.practice?'Trening · ':''}${game.course.name} · ${game.level}`);uiText('#hud-percent',`${Math.floor(progress*100+1e-5)}%`);
     document.querySelector('#hud-progress').style.setProperty('transform',`scaleX(${progress})`);
     document.querySelector('#hud-best').style.setProperty('--best',`${(game.practice?0:record.progress)*100}%`);
@@ -843,13 +883,13 @@ function drawGreedHud(){
     }
 }
 
-function drawCookie() {
-    const cookie = game.cookie;
-    if(game.isGreed && game.goldenCookie){
+function drawCookie(cookie=game.cookie) {
+    if(!cookie)return;
+    if(game.isGreed && (game.isAscent?cookie.golden:game.goldenCookie)){
         ctx.save();drawGlow(cookie.x+15,cookie.y+10,'#ffd34f',motionPreference?.matches?56:64);
         ctx.strokeStyle='#ffe28a';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(cookie.x+15,cookie.y+10,21,17,0,0,Math.PI*2);ctx.stroke();
         spriteCookie[0].draw(ctx,cookie.x,cookie.y);ctx.fillStyle='#ffd34f66';ctx.beginPath();ctx.ellipse(cookie.x+15,cookie.y+10,15,10,0,0,Math.PI*2);ctx.fill();
-        text('×3',cookie.x+15,cookie.y-12,12,'#ffe28a',800);ctx.restore();return;
+        if(!game.isAscent)text('×3',cookie.x+15,cookie.y-12,12,'#ffe28a',800);ctx.restore();return;
     }
     const powerup = POWERUPS[cookie.type];
     if(game.abilityReady){ctx.save();ctx.strokeStyle=game.style.color;ctx.lineWidth=3;ctx.beginPath();ctx.arc(cookie.x+15,cookie.y+10,25,0,Math.PI*2);ctx.stroke();ctx.restore();}
@@ -982,9 +1022,9 @@ function draw() {
         }
     }
 
-    if(game.isAscent)drawFactoryMachine();
+    if(game.isAscent){drawFactoryRooms();for(const m of game.machines)drawFactoryMachine(m);}
     if (['playing', 'dying','celebrating'].includes(game.state)) {
-        drawCookie(); drawOffers();
+        if(game.isAscent){for(const c of game.cookies)if(c.y>=game.cameraTop-40&&c.y<=game.cameraTop+680)drawCookie(c);}else drawCookie(); drawOffers();
     }
     syncShieldHum();syncMusic();
     const bird = game.bird;

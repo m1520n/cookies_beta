@@ -1,4 +1,4 @@
-import {ASCENT} from './ascent-world.js?v=ascent4';
+import {ASCENT} from './ascent-world.js?v=rooms3';
 export const GREED = {id:'greed',name:'Łasuch',duration:Infinity,endless:true,sectorSeconds:15,offers:[],sectors:null,gaps:[2.5,2.5,2.25,2]};
 export const COURSES = [
     {id:'press',name:'Tłocznia',duration:45,seed:1520,offers:[6,18,30],sectors:[['heavy'],['heavy'],['heavy','ricochet']],gaps:[2.5,2,2]},

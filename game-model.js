@@ -1,7 +1,7 @@
-import {CARDS,STYLES,cleanProfile,unlockedCards} from './progression.js?v=ascent4';
-import {Director,seededRandom} from './director.js?v=ascent4';
-import {getCourse,sectorDuration,cookiePosition} from './courses.js?v=ascent4';
-import {makeObstacle,moveObstacle,obstacleAt,obstacleAlive} from './obstacles.js?v=ascent4';
+import {CARDS,STYLES,cleanProfile,unlockedCards} from './progression.js?v=rooms3';
+import {Director,seededRandom} from './director.js?v=rooms3';
+import {getCourse,sectorDuration,cookiePosition} from './courses.js?v=rooms3';
+import {makeObstacle,moveObstacle,obstacleAt,obstacleAlive} from './obstacles.js?v=rooms3';
 export const WIDTH=400,HEIGHT=640,STEP=1/60;
 const RADIUS=22,EPS=1e-7;let serial=0;
 const FRENZY_STYLE={id:'greed',name:'Szał',symbol:'✦',color:'#ffb74f'};

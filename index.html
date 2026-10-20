@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#101b32">
     <link rel="icon" href="data:,">
     <title>Pozytywka.com — Ciastkobranie</title>
-    <link rel="stylesheet" href="style.css?v=ascent4">
+    <link rel="stylesheet" href="style.css?v=rooms3">
 </head>
 <body>
     <main class="game" aria-label="Ciastkobranie">
@@ -41,8 +41,9 @@
                 <small>lub naciśnij spację</small>
             </section>
             <div id="floor-picker" hidden role="group" aria-label="Mapa fabryki">
-                <button id="start-press" type="button" aria-pressed="true"><strong>01 · Tłocznia</strong><span>Ciastka budzą prasę</span></button>
+                <button id="start-press" type="button" aria-pressed="true"><strong>01 · Tłocznia</strong><span>Wyczuj rytm tłoków</span></button>
                 <button id="start-vent" type="button" disabled aria-pressed="false"><strong>02 · Wentylatornia</strong><span id="vent-status">Rozbij rdzeń prasy, żeby odkryć</span></button>
+                <button id="start-boiler" type="button" disabled aria-pressed="false"><strong>03 · Kotłownia</strong><span id="boiler-status">Rozbij rdzeń wentylatora, żeby odkryć</span></button>
             </div>
             <section class="overlay menu-panel" id="courses" hidden role="dialog" aria-modal="true" aria-labelledby="courses-title">
                 <button id="close-courses" class="close-panel" type="button" aria-label="Zamknij wybór trasy">×</button>
@@ -82,6 +83,6 @@
     </main>
     <noscript>Włącz JavaScript w przeglądarce, aby zagrać w Ciastkobranie.</noscript>
     <script src="sprite.js"></script>
-    <script type="module" src="game.js?v=ascent4"></script>
+    <script type="module" src="game.js?v=rooms3"></script>
 </body>
 </html>

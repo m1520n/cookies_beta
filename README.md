@@ -14,24 +14,28 @@ Bez zależności i budowania. Python 3 do serwera, Node.js 18+ do testów. Modu�
 
 Klik / dotyk / spacja — skok. Esc — pauza. Ukrycie karty zatrzymuje grę. Śmierć ma krótki hitstop i zwolniony upadek: 0,35 s dla prób krótszych niż 15 s, potem 0,7 s. Już po 0,12 s świeże naciśnięcie rozpoczyna rewanż, bez obowiązkowego ekranu wyników.
 
-## Fabryka — wspinaczka i odkrywanie
+## Fabryka — stałe komory i odkrywanie
 
-Jednym przyciskiem machasz skrzydłami, ptak sam odbija się od bocznych ścian. Kamera podąża w górę, gdy środek ptaka przekroczy 40% wysokości widoku, i nie cofa się przy opadaniu. Nie ma kolców ani śmiertelnego sufitu. Zwykła przeszkoda zabija poza Szałem; utrata próby następuje też po spadnięciu całym obszarem kolizji 40 jednostek pod ekran.
+Jednym przyciskiem machasz skrzydłami, ptak sam odbija się od bocznych ścian. Odpuszczenie skoku pozwala wyczekać cykl maszyny. Kamera podąża wyłącznie w górę; nie ma kolców ani śmiertelnego sufitu. Spadnięcie całym obszarem kolizji 40 jednostek pod widok kończy próbę. 20 jednostek świata to 1 metr.
 
-Pozycje ptaka, ciastek, maszyny, cząstek i zagrożeń pozostają we współrzędnych świata. Kamera zmienia wyłącznie widok. 20 jednostek odpowiada 1 m na HUD-zie. Mapa na ekranie startowym pokazuje dwa rzeczywiste obszary:
+Trasa ma trzy stałe piętra. Każde: trzy komory po 480 jednostek i finał długości 360, potem 120 jednostek przejścia. Geometria i początkowe fazy są powtarzalne; zegar komory zaczyna biec przy podejściu, nie resetuje się przy cofnięciu i zatrzymuje się na pauzie. Następne piętro nie uruchamia mechanizmów podczas walki z poprzednią maszyną.
 
-- **Tłocznia:** prasa zamyka drogę na wysokości 1200 jednostek (60 m). Sześć fizycznych ciastek budzi maszynę; postęp pokazują lampki na obudowie. Prasa wypuszcza zapowiadane kule co 2,5 s. Gródź łagodnie zatrzymuje wznoszenie. Trafienie w rdzeń o promieniu 28 podczas Szału otwiera przejście i od razu zapisuje odkrycie drugiego piętra.
-- **Wentylatornia:** otwarta wspinaczka z kolejnymi segmentami co 400 jednostek. Ciężkie kule, rykoszety i wahadła; wentylatory zakrzywiają tory nowych przeszkód maksymalnie o 32 jednostki. Kierunek jest zapamiętany przy wejściu, więc starym obiektom nie zmienia się nagle trajektoria. Zapowiedź korzysta z tej samej funkcji toru co fizyka.
+- **Tłocznia:** pojedynczy tłok, naprzemienne tłoki, wahadło; prasa na 90 m.
+- **Wentylatornia:** przesłona, przesłona z wahadłem, przesłona z rykoszetem; rdzeń wentylatora na 186 m.
+- **Kotłownia:** naprzemienna para, para z tłokiem, para z przesłoną; kocioł na 282 m.
+- **Nadbudowa:** nieskończony cykl znanych komór, co drugi zestaw odbity lustrzanie. Mechanizmy nie przyspieszają bez końca; parametry pozostają stałe.
 
-Przed prasą podajnik wystawia ciastka naprzemiennie po bokach komory, bez limitu. Pominięcie wcześniejszych ciastek nie blokuje postępu. Widoczne ciastko nigdy nie teleportuje się; nowe zastępuje pominięte dopiero po opuszczeniu widoku z marginesem. Zmiana piętra zachowuje istniejące obiekty i zegary.
+Stalowe elementy z pasami ostrzegawczymi i strumienie pary zabijają także w Szale. Piłki i świecące rdzenie można rozbić. Geometria rysowania, zapowiedzi i kolizji pochodzi z jednej funkcji; kontakt jest sprawdzany również pomiędzy klatkami fizyki. Mechanizmy najpierw przygotowują się przez sekundę. Konstrukcja ma stałe współrzędne świata, nie śledzi ptaka ani kamery.
 
-Wejścia przeszkód aktywuje osiągnięta wysokość; każdy segment uruchamia się raz. Jednocześnie najwyżej trzy przeszkody, pełna sekundowa zapowiedź. Podczas zapowiedzi wejście śledzi górną krawędź kamery; kula startuje znad ekranu dopiero po jej zakończeniu, a później zachowuje stały początek toru w świecie. Szybkie skoki nie pozwalają wyprzedzić ostrzeżenia. Zniszczenie obiektu nie powtarza wejścia; strzały prasy mają osobny stały zegar. Obiekty usuwa się po opuszczeniu widoku z marginesem albo wygaśnięciu czasu przelotu.
+Każda zwykła komora ma zwykłe ciastko na podejściu oraz złote w trudniejszym miejscu. Oba są obecne równocześnie; złote daje dwa ładunki i trzy punkty przed mnożnikiem. Cztery ładunki plus kolejne ciastko uruchamiają 3 s Szału; potem 4 s przerwy, bez przedłużania i ładowania aktywnej mocy. Seria nadal mnoży punkty, ale nie zajmuje osobnego paska na ekranie.
 
-Fabryka używa zasad Szału i serii opisanych poniżej dla Łasucha. Każdy zaczyna z pustą energią, bez zakupionych ułatwień, pióra, kart i stylów. Wygląd pozostaje wybrany przez gracza. Odkrytą Wentylatornię można wybrać jako początek nowej próby; start jest na wysokości 1320 jednostek (66 m), z pustą energią i serią. Rekord wysokości i punktów jest oddzielny dla każdego miejsca startu. Jeden fizyczny przedmiot to jeden okruch; brak nagród sektorowych.
+Przed finałem podajnik uzupełnia pominięte ciastka dopiero poza widokiem lub po zebraniu. Nie trzeba zebrać sześciu ciastek, żeby obudzić maszynę. Odsłonięty rdzeń trafiony podczas Szału otwiera gródź, z krótkim hitstopem i rozpadem obudowy. Nowe piętro odblokowuje się natychmiast, bez zatrzymywania rozgrywki i wybierania kart. Widoczne obiekty nie teleportują się przy zmianie piętra.
 
-Nowy tryb ma identyfikator `ascent`; `ascent-model.js` rozszerza dotychczasowy model, a `ascent-world.js` opisuje miejsca, gródź i wejścia zagrożeń. Profil `ciastkobranie.profile.v1` dostaje addytywne pola `ascentUnlocked`, `ascentStart`, `ascentIntroduced` oraz rekordy `ascent:1` i `ascent:2`. Odkrycie zapisuje się natychmiast, rozliczenie ciastek po porażce pozostaje jednorazowe. Stare rekordy, zakupy, portfel i odblokowania są zachowane. Przejście na domyślną Fabrykę następuje raz; późniejszy wybór innego trybu jest zapamiętywany.
+HUD: wysokość, piętro, trzy symbole komór i finał oraz energia. Wynik: wysokość, rekord i restart. Na mapie można wybrać odkryte piętro jako początek próby, z pustą energią. Fabryka nie używa zakupionych ułatwień, pióra ani cech z Wyzwań.
 
-Testy odtwarzają rzeczywiste skoki: dla ziarna 42 sześć ciastek, Szał, trafienie rdzenia i wejście do Wentylatorni, bez przesuwania ptaka lub podmieniania obiektów. To potwierdza osiągalność; tempo, czytelność i przyjemność odkrywania wymagają ogrania przez człowieka. Pierwszy prototyp ma jedną maszynę i dwa obszary, bez dalszych zamkniętych obietnic na mapie.
+Profil `ciastkobranie.profile.v1` zachowuje walutę, wyglądy, zakupy i dawne odkrycia. Wentylatornia odblokowana we wcześniejszej wersji pozostaje dostępna. Trzecie piętro rozszerza `ascentUnlocked` i `ascentStart`; rekordy nowej trasy są w `ascent-rooms:1/2/3`, stare `ascent:1/2` pozostają zapisane. Rozliczenie próby jest jednorazowe.
+
+`test/fixtures/ascent-inputs.json` zawiera sekwencje rzeczywistych skoków znalezione przez `findAscentWitness` z `test/helpers/ascent-reachability.js`. Testy odtwarzają je w produkcyjnym modelu: każde piętro wraz z maszyną, przejścia zwykłych komór bez Szału oraz opcjonalne złote ciastka. Oddzielne próby stałego i zmiennego klikania weryfikują, że ślepe skakanie nie przechodzi trzech komór. Testy potwierdzają osiągalność, a przyjemność i czytelność trzeba ocenić podczas ogrania.
 
 ## Łasuch — poprzedni tryb arcade
 

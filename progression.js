@@ -1,4 +1,4 @@
-import {COURSES} from './courses.js?v=ascent4';
+import {COURSES} from './courses.js?v=rooms3';
 // Run traits occupy at most three slots; legacy unlock IDs remain stable.
 export const CARDS = [
     { id:'battery', name:'Bateria', symbol:'ϟ', description:'Energia do aktywacji: 5 / 4 zamiast 6.', max:2, color:'#ffd78f' },
@@ -32,7 +32,7 @@ const count = value => Number.isSafeInteger(value) && value >= 0 ? value : 0;
 function cleanMetrics(value = {}) {
     const number = key => Number.isFinite(value?.[key]) && value[key] >= 0 ? value[key] : 0;
     return {pressBrokenAt:number('pressBrokenAt'),goldenCookies:Math.floor(number('goldenCookies')),shatters:Math.floor(number('shatters')),firstFrenzyAt:number('firstFrenzyAt'),shieldSeconds:number('shieldSeconds'),twoPowerSeconds:number('twoPowerSeconds'),nearMisses:Math.floor(number('nearMisses')),
-        firstTraitAt:number('firstTraitAt'),offersSeen:Math.floor(number('offersSeen')),offersTaken:Math.floor(number('offersTaken')),retrySeconds:number('retrySeconds'),abilities:Math.floor(number('abilities')),rescues:Math.floor(number('rescues')),cause:['ball','floor','ceiling','complete','fall'].includes(value?.cause) ? value.cause : 'ball'};
+        firstTraitAt:number('firstTraitAt'),offersSeen:Math.floor(number('offersSeen')),offersTaken:Math.floor(number('offersTaken')),retrySeconds:number('retrySeconds'),abilities:Math.floor(number('abilities')),rescues:Math.floor(number('rescues')),cause:['ball','floor','ceiling','complete','fall','structure'].includes(value?.cause) ? value.cause : 'ball'};
 }
 export function unlockedCourses(profile) {
     const clears=profile.courseClears||[];
@@ -46,12 +46,12 @@ export function cleanProfile(value = {}) {
     const courseClears=Array.isArray(value.courseClears) ? value.courseClears.filter(id=>COURSES.some(course=>course.id===id&&id!=='marathon')) : [];
     return {
         legacyWinner,courseClears,greedIntroduced:true,ascentIntroduced:true,
-        ascentUnlocked:Array.isArray(value.ascentUnlocked)&&value.ascentUnlocked.includes(2)?[1,2]:[1],
-        ascentStart:value.ascentStart===2&&Array.isArray(value.ascentUnlocked)&&value.ascentUnlocked.includes(2)?2:1,
+        ascentUnlocked:[1,...[2,3].filter(f=>Array.isArray(value.ascentUnlocked)&&value.ascentUnlocked.includes(f))],
+        ascentStart:[2,3].includes(value.ascentStart)&&Array.isArray(value.ascentUnlocked)&&value.ascentUnlocked.includes(value.ascentStart)?value.ascentStart:1,
         selectedCourse:value.ascentIntroduced===true && unlockedCourses({legacyWinner,courseClears}).includes(value.selectedCourse) ? value.selectedCourse : 'ascent',
         ownedLooks:Array.isArray(value.ownedLooks) ? value.ownedLooks.filter(id=>LOOKS.some(look=>look.id===id&&look.cost)) : [],
         legacyBest:count(value.legacyBest),legacyBestImported:value.legacyBestImported===true,
-        records:{...Object.fromEntries([1,2].map(floor=>{const r=value.records?.[`ascent:${floor}`];return [`ascent:${floor}`,{progress:0,score:count(r?.score),height:positive(r?.height)}];})),greed:{progress:0,score:count(value.records?.greed?.score)},...Object.fromEntries(COURSES.flatMap(course=>STYLES.map(style=>{const key=`${course.id}:${style.id}`,record=value.records?.[key];return [key,{progress:Math.min(1,positive(record?.progress)),score:count(record?.score)}];})))},
+        records:{...Object.fromEntries([1,2,3].map(floor=>{const key=`ascent-rooms:${floor}`,r=value.records?.[key];return [key,{progress:0,score:count(r?.score),height:positive(r?.height)}];})),...Object.fromEntries([1,2].map(floor=>{const r=value.records?.[`ascent:${floor}`];return [`ascent:${floor}`,{progress:0,score:count(r?.score),height:positive(r?.height)}];})),greed:{progress:0,score:count(value.records?.greed?.score)},...Object.fromEntries(COURSES.flatMap(course=>STYLES.map(style=>{const key=`${course.id}:${style.id}`,record=value.records?.[key];return [key,{progress:Math.min(1,positive(record?.progress)),score:count(record?.score)}];})))},
         wins: count(value.wins), bestChain: count(value.bestChain),
         look: unlockedLooks({wins:count(value.wins),bestChain:count(value.bestChain),ownedLooks:Array.isArray(value.ownedLooks)?value.ownedLooks:[]}).includes(value.look) ? value.look : 'classic',
         victoryRuns: Array.isArray(value.victoryRuns) ? value.victoryRuns.filter(id => typeof id === 'string').slice(-128) : [],
@@ -61,7 +61,7 @@ export function cleanProfile(value = {}) {
         lifetimeBonuses: count(value.lifetimeBonuses), runs: count(value.runs), bestSector: count(value.bestSector),
         upgrades: Object.fromEntries(NEST_UPGRADES.map(item => [item.id, Math.min(2, count(value.upgrades?.[item.id]))])),
         settledRuns: Array.isArray(value.settledRuns) ? value.settledRuns.filter(id => typeof id === 'string').slice(-128) : [],
-        lastRun: value.lastRun ? {id:typeof value.lastRun.id==='string'?value.lastRun.id:'',startFloor:value.lastRun.startFloor===2?2:1,height:positive(value.lastRun.height),mode:value.lastRun.mode==='ascent'||value.lastRun.mode==='greed'||COURSES.some(course=>course.id===value.lastRun.mode)?value.lastRun.mode:'marathon',progress:Math.min(1,positive(value.lastRun.progress)), seed: count(value.lastRun.seed), score: count(value.lastRun.score), level: count(value.lastRun.level), elapsed:Number.isFinite(value.lastRun.elapsed) && value.lastRun.elapsed >= 0 ? value.lastRun.elapsed : 0, metrics:cleanMetrics(value.lastRun.metrics) } : null,
+        lastRun: value.lastRun ? {id:typeof value.lastRun.id==='string'?value.lastRun.id:'',startFloor:[2,3].includes(value.lastRun.startFloor)?value.lastRun.startFloor:1,height:positive(value.lastRun.height),mode:value.lastRun.mode==='ascent'||value.lastRun.mode==='greed'||COURSES.some(course=>course.id===value.lastRun.mode)?value.lastRun.mode:'marathon',progress:Math.min(1,positive(value.lastRun.progress)), seed: count(value.lastRun.seed), score: count(value.lastRun.score), level: count(value.lastRun.level), elapsed:Number.isFinite(value.lastRun.elapsed) && value.lastRun.elapsed >= 0 ? value.lastRun.elapsed : 0, metrics:cleanMetrics(value.lastRun.metrics) } : null,
     };
 }
 export function unlockedCards(profile) {
@@ -106,10 +106,10 @@ export class ProfileStore {
         this.value.bestChain = Math.max(this.value.bestChain, count(run.bestChain));
         this.value.lastBuild = cleanProfile({lastBuild:run.build}).lastBuild;
         this.value.bestSector = Math.max(this.value.bestSector, count(run.level));
-        const key=run.mode==='ascent'?`ascent:${run.startFloor===2?2:1}`:run.mode==='greed' ? 'greed' : `${run.mode||'marathon'}:${run.style||'guard'}`;
+        const key=run.mode==='ascent'?`${run.routeVersion===2?'ascent-rooms':'ascent'}:${[2,3].includes(run.startFloor)?run.startFloor:1}`:run.mode==='greed' ? 'greed' : `${run.mode||'marathon'}:${run.style||'guard'}`;
         if(this.value.records[key]) {this.value.records[key].progress=Math.max(this.value.records[key].progress,Math.min(1,positive(run.progress)));this.value.records[key].score=Math.max(this.value.records[key].score,count(run.score));}
-        if(run.mode==='ascent')this.value.records[key].height=Math.max(this.value.records[key].height,positive(run.height));
-        this.value.lastRun = {id:run.id,startFloor:run.startFloor===2?2:1,height:positive(run.height),mode:run.mode||'marathon',progress:Math.min(1,positive(run.progress)), seed: count(run.seed), score: count(run.score), level: count(run.level), elapsed:Number.isFinite(run.elapsed) && run.elapsed >= 0 ? run.elapsed : 0, metrics:cleanMetrics(run.metrics) };
+        if(run.mode==='ascent'&&this.value.records[key])this.value.records[key].height=Math.max(this.value.records[key].height,positive(run.height));
+        this.value.lastRun = {id:run.id,startFloor:[2,3].includes(run.startFloor)?run.startFloor:1,height:positive(run.height),mode:run.mode||'marathon',progress:Math.min(1,positive(run.progress)), seed: count(run.seed), score: count(run.score), level: count(run.level), elapsed:Number.isFinite(run.elapsed) && run.elapsed >= 0 ? run.elapsed : 0, metrics:cleanMetrics(run.metrics) };
         this.value.settledRuns = [...this.value.settledRuns, run.id].slice(-128);
         this.save();
         return { awarded: true, crumbs, unlocked: unlockedCards(this.value).filter(id => !before.includes(id)) };
@@ -123,7 +123,7 @@ export class ProfileStore {
         this.save(); return true;
     }
     adoptLegacyBest(score){this.reload();if(!this.value.legacyBestImported){this.value.legacyBest=Math.max(this.value.legacyBest,count(score));this.value.legacyBestImported=true;this.save();}}
-    discoverFloor(floor){this.reload();if(floor!==2||this.value.ascentUnlocked.includes(2))return false;this.value.ascentUnlocked.push(2);this.save();return true;}
+    discoverFloor(floor){this.reload();if(![2,3].includes(floor)||this.value.ascentUnlocked.includes(floor))return false;this.value.ascentUnlocked.push(floor);this.save();return true;}
     setStartFloor(floor){this.reload();if(!this.value.ascentUnlocked.includes(floor))return false;this.value.ascentStart=floor;this.value.selectedCourse='ascent';this.save();return true;}
     setCourse(id){this.reload();if(!unlockedCourses(this.value).includes(id))return false;this.value.selectedCourse=id;this.save();return true;}
     purchaseLook(id){
