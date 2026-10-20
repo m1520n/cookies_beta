@@ -1,3 +1,4 @@
+import {ASCENT} from './ascent-world.js?v=ascent3';
 export const GREED = {id:'greed',name:'Łasuch',duration:Infinity,endless:true,sectorSeconds:15,offers:[],sectors:null,gaps:[2.5,2.5,2.25,2]};
 export const COURSES = [
     {id:'press',name:'Tłocznia',duration:45,seed:1520,offers:[6,18,30],sectors:[['heavy'],['heavy'],['heavy','ricochet']],gaps:[2.5,2,2]},
@@ -5,7 +6,7 @@ export const COURSES = [
     {id:'mechanism',name:'Mechanizm',duration:75,seed:7311,offers:[6,19,32,45,58,66],sectors:[['pendulum'],['pendulum','heavy'],['heavy','ricochet','pendulum']],gaps:[2.5,2.25,2]},
     {id:'marathon',name:'Maraton',duration:240,offers:[8,35,70,105,140,175,210],sectors:null,gaps:[2.5,2.5,2.25,2]},
 ];
-export function getCourse(id) {return id==='greed' ? GREED : COURSES.find(course=>course.id===id)||GREED;}
+export function getCourse(id) {return id==='ascent' ? ASCENT : id==='greed' ? GREED : COURSES.find(course=>course.id===id)||GREED;}
 export function sectorDuration(course) {return course.sectorSeconds || (course.id==='marathon' ? 30 : course.duration/3);}
 export function sectorFamilies(course,index,seed=0) {
     if(course.id==='greed')return index<3 ? [['heavy'],['ricochet'],['pendulum']][index] : ['heavy','ricochet','pendulum'];

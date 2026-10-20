@@ -1,7 +1,7 @@
-import {CARDS,STYLES,cleanProfile,unlockedCards} from './progression.js';
-import {Director,seededRandom} from './director.js';
-import {getCourse,sectorDuration,cookiePosition} from './courses.js';
-import {makeObstacle,moveObstacle,obstacleAt,obstacleAlive} from './obstacles.js';
+import {CARDS,STYLES,cleanProfile,unlockedCards} from './progression.js?v=ascent3';
+import {Director,seededRandom} from './director.js?v=ascent3';
+import {getCourse,sectorDuration,cookiePosition} from './courses.js?v=ascent3';
+import {makeObstacle,moveObstacle,obstacleAt,obstacleAlive} from './obstacles.js?v=ascent3';
 export const WIDTH=400,HEIGHT=640,STEP=1/60;
 const RADIUS=22,EPS=1e-7;let serial=0;
 const FRENZY_STYLE={id:'greed',name:'Szał',symbol:'✦',color:'#ffb74f'};
@@ -206,7 +206,7 @@ export class Game {
     settle(cause){
         this.best=this.practice?this.best:Math.max(this.best,this.score);
         this.snapshot=Object.freeze({id:this.runId,mode:this.course.id,style:this.style.id,practice:this.practice,seed:this.seed,progress:this.progress,score:this.score,collected:this.collected,bonuses:this.bonuses,
-            won:this.won,bestChain:this.bestChain,build:Object.freeze(Object.entries(this.cards).map(([id,rank])=>Object.freeze({id,rank}))),metrics:Object.freeze({...this.metrics,cause}),
+            ...this.runDetails,won:this.won,bestChain:this.bestChain,build:Object.freeze(Object.entries(this.cards).map(([id,rank])=>Object.freeze({id,rank}))),metrics:Object.freeze({...this.metrics,cause}),
             completedSectors:this.isGreed?0:Math.floor((this.courseTime+EPS)/sectorDuration(this.course)),level:this.level,elapsed:this.elapsed,highlight:this.highlight});
         if(!this.practice)this.onSettle(this.snapshot);
     }

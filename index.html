@@ -6,13 +6,13 @@
     <meta name="theme-color" content="#101b32">
     <link rel="icon" href="data:,">
     <title>Pozytywka.com — Ciastkobranie</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=ascent3">
 </head>
 <body>
     <main class="game" aria-label="Ciastkobranie">
         <div class="toolbar">
             <span>Ciastkobranie</span>
-            <button id="play-greed" type="button" aria-pressed="true">Łasuch</button>
+            <button id="play-greed" type="button" aria-pressed="true">Fabryka</button>
             <button id="open-courses" type="button">Wyzwania</button>
             <button id="open-nest" type="button">Gniazdo</button>
             <button id="mute" type="button" aria-pressed="false">Wycisz</button>
@@ -36,9 +36,14 @@
                 <button id="next-course" type="button" hidden>Następna trasa</button>
                 <button id="restart" type="button">Jeszcze raz</button>
                 <button id="practice" type="button" class="secondary">Trening fragmentu</button>
+                <button id="return-map" type="button" hidden class="secondary">Mapa fabryki</button>
                 <button id="result-nest" type="button" hidden class="secondary">Rozwiń Gniazdo</button>
                 <small>lub naciśnij spację</small>
             </section>
+            <div id="floor-picker" hidden role="group" aria-label="Mapa fabryki">
+                <button id="start-press" type="button" aria-pressed="true"><strong>01 · Tłocznia</strong><span>Ciastka budzą prasę</span></button>
+                <button id="start-vent" type="button" disabled aria-pressed="false"><strong>02 · Wentylatornia</strong><span id="vent-status">Rozbij rdzeń prasy, żeby odkryć</span></button>
+            </div>
             <section class="overlay menu-panel" id="courses" hidden role="dialog" aria-modal="true" aria-labelledby="courses-title">
                 <button id="close-courses" class="close-panel" type="button" aria-label="Zamknij wybór trasy">×</button>
                 <h1 id="courses-title">Wyzwania</h1><p class="menu-intro">Krótkie trasy i Maraton. Poznaj ich rytm.</p>
@@ -77,6 +82,6 @@
     </main>
     <noscript>Włącz JavaScript w przeglądarce, aby zagrać w Ciastkobranie.</noscript>
     <script src="sprite.js"></script>
-    <script type="module" src="game.js"></script>
+    <script type="module" src="game.js?v=ascent3"></script>
 </body>
 </html>

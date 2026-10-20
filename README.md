@@ -1,6 +1,6 @@
 # Ciastkobranie
 
-Arcade jednym przyciskiem, napisane w JavaScript i Canvas 2D. Główny tryb **Łasuch**: zbieraj, utrzymuj serię, przygotuj Szał i przez chwilę poluj na przeszkody. Dotychczasowe trasy i Maraton pozostają w menu **Wyzwania**.
+Arcade jednym przyciskiem, napisane w JavaScript i Canvas 2D. Główny tryb **Fabryka**: wspinaj się, zbieraj ciastka, obudź prasę i rozbij jej rdzeń podczas Szału, żeby odkryć Wentylatornię. Dotychczasowy Łasuch, krótkie trasy i Maraton pozostają w menu **Wyzwania**.
 
 ## Uruchomienie
 
@@ -14,7 +14,26 @@ Bez zależności i budowania. Python 3 do serwera, Node.js 18+ do testów. Modu�
 
 Klik / dotyk / spacja — skok. Esc — pauza. Ukrycie karty zatrzymuje grę. Śmierć ma krótki hitstop i zwolniony upadek: 0,35 s dla prób krótszych niż 15 s, potem 0,7 s. Już po 0,12 s świeże naciśnięcie rozpoczyna rewanż, bez obowiązkowego ekranu wyników.
 
-## Łasuch — główny tryb
+## Fabryka — wspinaczka i odkrywanie
+
+Jednym przyciskiem machasz skrzydłami, ptak sam odbija się od bocznych ścian. Kamera podąża w górę, gdy środek ptaka przekroczy 40% wysokości widoku, i nie cofa się przy opadaniu. Nie ma kolców ani śmiertelnego sufitu. Zwykła przeszkoda zabija poza Szałem; utrata próby następuje też po spadnięciu całym obszarem kolizji 40 jednostek pod ekran.
+
+Pozycje ptaka, ciastek, maszyny, cząstek i zagrożeń pozostają we współrzędnych świata. Kamera zmienia wyłącznie widok. 20 jednostek odpowiada 1 m na HUD-zie. Mapa na ekranie startowym pokazuje dwa rzeczywiste obszary:
+
+- **Tłocznia:** prasa zamyka drogę na wysokości 1200 jednostek (60 m). Sześć fizycznych ciastek budzi maszynę; postęp pokazują lampki na obudowie. Prasa wypuszcza zapowiadane kule co 2,5 s. Gródź łagodnie zatrzymuje wznoszenie. Trafienie w rdzeń o promieniu 28 podczas Szału otwiera przejście i od razu zapisuje odkrycie drugiego piętra.
+- **Wentylatornia:** otwarta wspinaczka z kolejnymi segmentami co 400 jednostek. Ciężkie kule, rykoszety i wahadła; wentylatory zakrzywiają tory nowych przeszkód maksymalnie o 32 jednostki. Kierunek jest zapamiętany przy wejściu, więc starym obiektom nie zmienia się nagle trajektoria. Zapowiedź korzysta z tej samej funkcji toru co fizyka.
+
+Przed prasą podajnik wystawia ciastka naprzemiennie po bokach komory, bez limitu. Pominięcie wcześniejszych ciastek nie blokuje postępu. Widoczne ciastko nigdy nie teleportuje się; nowe zastępuje pominięte dopiero po opuszczeniu widoku z marginesem. Zmiana piętra zachowuje istniejące obiekty i zegary.
+
+Wejścia przeszkód aktywuje osiągnięta wysokość; każdy segment uruchamia się raz. Jednocześnie najwyżej trzy przeszkody, pełna sekundowa zapowiedź. Zniszczenie obiektu nie powtarza wejścia; strzały prasy mają osobny stały zegar. Obiekty usuwa się po opuszczeniu widoku z marginesem albo wygaśnięciu czasu przelotu.
+
+Fabryka używa zasad Szału i serii opisanych poniżej dla Łasucha. Każdy zaczyna z pustą energią, bez zakupionych ułatwień, pióra, kart i stylów. Wygląd pozostaje wybrany przez gracza. Odkrytą Wentylatornię można wybrać jako początek nowej próby; start jest na wysokości 1320 jednostek (66 m), z pustą energią i serią. Rekord wysokości i punktów jest oddzielny dla każdego miejsca startu. Jeden fizyczny przedmiot to jeden okruch; brak nagród sektorowych.
+
+Nowy tryb ma identyfikator `ascent`; `ascent-model.js` rozszerza dotychczasowy model, a `ascent-world.js` opisuje miejsca, gródź i wejścia zagrożeń. Profil `ciastkobranie.profile.v1` dostaje addytywne pola `ascentUnlocked`, `ascentStart`, `ascentIntroduced` oraz rekordy `ascent:1` i `ascent:2`. Odkrycie zapisuje się natychmiast, rozliczenie ciastek po porażce pozostaje jednorazowe. Stare rekordy, zakupy, portfel i odblokowania są zachowane. Przejście na domyślną Fabrykę następuje raz; późniejszy wybór innego trybu jest zapamiętywany.
+
+Testy odtwarzają rzeczywiste skoki: dla ziarna 42 sześć ciastek, Szał, trafienie rdzenia po około 5,7 s i wejście do Wentylatorni po około 6,1 s, bez przesuwania ptaka lub podmieniania obiektów. To potwierdza osiągalność; tempo, czytelność i przyjemność odkrywania wymagają ogrania przez człowieka. Pierwszy prototyp ma jedną maszynę i dwa obszary, bez dalszych zamkniętych obietnic na mapie.
+
+## Łasuch — poprzedni tryb arcade
 
 Lot bez końca, po osobny rekord. Sterowanie i fizyka pozostają takie same jak w Wyzwaniach. W tym prototypie każdy startuje z równymi parametrami: bez kart, stylów, losowych power-upów, zakupionych ulepszeń i pióra. Wybrany wygląd ptaka nadal działa.
 
@@ -27,9 +46,9 @@ Lot bez końca, po osobny rekord. Sterowanie i fizyka pozostają takie same jak 
 - Pierwsze 15 s: kule; następne 15 s: rykoszety; kolejne 15 s: wahadła. Potem mieszane sektory po 15 s. Odstęp wejść 2,5 / 2,5 / 2,25 / 2 s, później stały; maksymalnie trzy zagrożenia. Świat płynnie trwa przez zmianę sektora, bez komunikatów o levelach.
 - Każde fizyczne ciastko daje jeden okruch; złoty bonus, mnożniki, rozbicia i przeżyte sektory nie mnożą waluty. Śmierć nie zabiera zarobionych okruchów. Rewanż zachowuje ziarno.
 
-Dotychczasowy profil jest migrowany raz do domyślnego Łasucha. Późniejszy wybór Wyzwania jest zapamiętywany. Historyczne rekordy, portfel, zakupy i odblokowania pozostają zachowane; rekord Łasucha jest osobny i niezależny od stylu. W metrykach ostatniej rundy zapisują się także złote ciastka, rozbicia i czas pierwszego Szału, lokalnie i bez wysyłania danych.
+Łasuch pozostaje dostępny w Wyzwaniach, z zachowanym osobnym rekordem. Wybór trybu jest zapamiętywany. Historyczne rekordy, portfel, zakupy i odblokowania pozostają zachowane; rekord Łasucha jest osobny i niezależny od stylu. W metrykach ostatniej rundy zapisują się także złote ciastka, rozbicia i czas pierwszego Szału, lokalnie i bez wysyłania danych.
 
-Dalsze sekcje opisują **Wyzwania**; ich moce, cechy, ulepszenia i nagrody sektorowe nie obowiązują w Łasuchu.
+Dalsze sekcje opisują **Wyzwania**; ich moce, cechy, ulepszenia i nagrody sektorowe nie obowiązują w Łasuchu ani w Fabryce.
 
 ## Trasy i nauka
 
@@ -101,7 +120,7 @@ Canvas 2D pozostaje rendererem: przy tej skali migracja silnika nie daje potwier
 Syntezowany rytm 120 BPM podąża za zegarem trasy, także przy spowolnieniu. Nie kwantyzuje sterowania. Rodziny przeszkód mają osobne zapowiedzi i brzmienia rozbicia. Pauza i wyciszenie zatrzymują dźwięki; brak audio nie przerywa gry.
 
 - `?perf=1`: rzeczywisty FPS, koszt rysowania i największa przerwa.
-- `?seed=123`: powtarzalny Maraton.
+- `?seed=123`: powtarzalna Fabryka, Łasuch lub Maraton.
 - `?debug=1`: promienie kolizji.
 
 Testy obejmują harmonogramy, tysiąc ziaren Maratonu, ciągłość sektorów, limity kombinacji, moce, trening, zapis i migrację oraz kontroler przeglądarkowy. Wyszukiwanie sekwencji skoków wyznacza przejście każdej krótkiej trasy; odtworzenie w rzeczywistym modelu sprawdza je dla trzech stylów bez przesuwania ptaka lub usuwania przeszkód. Osobne wyszukiwanie wejść odtwarza w rzeczywistym modelu Łasucha zebranie złotej okazji, uruchomienie Szału i rozbicie zaplanowanej przeszkody; dla ziarna 42 pierwsza moc wystąpiła po około 4,2 s, a pełna pętla po 5,4 s. Testy potwierdzają osiągalność, nie subiektywną trudność ani przyjemność gry. Po pięciu próbach należy ocenić, czy gracz szuka okazji, wyczekuje Szału i ma pomysł na kolejny rewanż.
@@ -112,4 +131,4 @@ Fizyka pozostaje przy 60 Hz niezależnie od częstotliwości renderowania. Wcze�
 
 `courses.js` — trasy i układy ciastek; `director.js` — harmonogram wejść; `obstacles.js` — trajektorie; `game-model.js` — fizyka i reguły; `progression.js` — profil; `game.js` — sterowanie, dźwięk i Canvas; `test/helpers/reachability.js` — wyszukiwanie przejść.
 
-Gałęzie: `codex/arcade-checkpoint` zachowuje wcześniejszy prototyp, `codex/mastery-sectors` trasy i sektory, a `codex/greed-arcade` główny tryb Łasuch. Główna gałąź pozostaje bez zmian.
+Gałęzie: `codex/arcade-checkpoint` zachowuje wcześniejszy prototyp, `codex/mastery-sectors` trasy i sektory, a `codex/greed-arcade` Łasucha, a `codex/factory-ascent` wspinaczkę przez Fabrykę. Główna gałąź pozostaje bez zmian.

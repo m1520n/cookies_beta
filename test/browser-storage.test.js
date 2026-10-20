@@ -2,15 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { Game, WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from '../game-model.js';
+import {FactoryGame as Game} from '../ascent-model.js';
+import {GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey} from '../ascent-world.js';
+import { WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from '../game-model.js';
 import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock, PROFILE_KEY } from '../progression.js';
-import {COURSES,sectorDuration} from '../courses.js';
+import {COURSES,GREED,sectorDuration} from '../courses.js';
 import {OBSTACLES,obstacleAt} from '../obstacles.js';
 const source = readFileSync(new URL('../game.js', import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
 function storageWith(values={}) { const data=new Map(Object.entries(values)); return {data,getItem:key=>data.get(key)??null,setItem:(key,value)=>data.set(key,value)}; }
 function browser(storage, options={}) {
     const elements=new Map(); const documentHandlers={}; let time=1000; let raf;
     const ctx=new Proxy({}, {get:(target,key)=>target[key]??(()=>{}),set:(target,key,value)=>(target[key]=value,true)});
+    ctx.arc=(x,y,radius)=>assert.ok(Number.isFinite(radius)&&radius>=0,'Canvas circle must have a finite nonnegative radius');
     class Element {
         constructor(tag='div') { this.tag=tag;this.hidden=false;this.disabled=false;this.textContent='';this.attributes={};this.handlers={};this.children=[];this.style={setProperty(){}}; }
         setAttribute(key,value){this.attributes[key]=value;}
@@ -26,13 +29,13 @@ function browser(storage, options={}) {
     }
     const getElement=selector=>{
         if(!elements.has(selector)){
-            const node=new Element(['#play-greed','#mute','#restart','#resume','#skip-death','#open-nest','#result-nest','#close-nest','#open-courses','#close-courses','#practice','#next-course','#new-marathon'].includes(selector)?'button':'div');
-            node.id=selector.slice(1);node.hidden=['#result','#pause','#upgrade','#nest','#courses','#next-course','#new-marathon','#skip-death'].includes(selector);elements.set(selector,node);
+            const node=new Element(['#start-press','#start-vent','#return-map','#play-greed','#mute','#restart','#resume','#skip-death','#open-nest','#result-nest','#close-nest','#open-courses','#close-courses','#practice','#next-course','#new-marathon'].includes(selector)?'button':'div');
+            node.id=selector.slice(1);node.hidden=['#floor-picker','#result','#pause','#upgrade','#nest','#courses','#next-course','#new-marathon','#skip-death'].includes(selector);elements.set(selector,node);
         } return elements.get(selector);
     };
     const document={querySelector:getElement,createElement:tag=>new Element(tag),addEventListener:(name,callback)=>documentHandlers[name]=callback};
     const sandbox=vm.createContext({
-        Game,WIDTH,HEIGHT,STEP,cookieWord,POWERUPS,ProfileStore,NEST_UPGRADES,CARDS,STYLES,LOOKS,unlockedLooks,unlockedCourses,nextUnlock,COURSES,sectorDuration,OBSTACLES,obstacleAt,localStorage:storage,
+        Game,WIDTH,HEIGHT,STEP,cookieWord,POWERUPS,ProfileStore,NEST_UPGRADES,CARDS,STYLES,LOOKS,unlockedLooks,unlockedCourses,nextUnlock,COURSES,GREED,sectorDuration,GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey,OBSTACLES,obstacleAt,localStorage:storage,
         document,window:{AudioContext:options.AudioContext,addEventListener(){},devicePixelRatio:2,matchMedia:()=>({matches:options.reducedMotion||false,addEventListener(){}})},
         performance:{now:()=>time},Audio:class{play(){return Promise.resolve();}pause(){}},
         Image:class{set src(value){this.onload();}},initSprites(){},requestAnimationFrame:callback=>raf=callback,
@@ -85,13 +88,28 @@ test('audio voices including music are bounded and pause and mute stop them',()=
  p.elements.get('#mute').click();p.run("play('feather');setPaused(true)");assert.equal(p.run('arcadeVoices.size'),0);assert.ok(nodes.every(n=>n.stopped));
 });
 
-test('greed is the migrated default, has a compact score result and keeps challenge settings out of its nest',()=>{
+test('legacy greed still has a compact score result and keeps challenge settings out of its nest',()=>{
  const storage=storageWith({bestScore:'237',[PROFILE_KEY]:JSON.stringify({version:1,selectedCourse:'press',crumbs:500})}),p=browser(storage);
- assert.equal(p.run('game.isGreed'),true);assert.equal(p.run('profileStore.value.crumbs'),500);
+ assert.equal(p.run('game.isAscent'),true);assert.equal(p.run('profileStore.value.crumbs'),500);p.run("selectCourse('greed')");
  p.elements.get('#open-nest').click();assert.equal(p.elements.get('#challenge-options').hidden,true);p.elements.get('#close-nest').click();
  p.run('jump();game.collectCookie();game.finish();for(let i=0;i<30;i++)game.update()');
  assert.equal(p.elements.get('#score').textContent,'1 pkt');assert.equal(p.elements.get('#best').textContent,'Rekord: 1 pkt');
  assert.equal(p.elements.get('#practice').hidden,true);assert.equal(p.elements.get('#earned').hidden,true);assert.equal(storage.data.get('bestScore'),'237');
  p.elements.get('#open-courses').click();p.elements.get('#course-items').children[0].click();p.elements.get('#open-nest').click();assert.equal(p.elements.get('#challenge-options').hidden,false);
- p.elements.get('#close-nest').click();p.elements.get('#play-greed').click();assert.equal(p.run('game.isGreed'),true);
+ p.elements.get('#close-nest').click();p.elements.get('#play-greed').click();assert.equal(p.run('game.isAscent'),true);
+});
+
+test('factory map unlocks immediately and starts ventilation with separate record and empty energy',()=>{
+ const storage=storageWith(),p=browser(storage);assert.equal(p.run('game.isAscent'),true);
+ assert.equal(p.elements.get('#floor-picker').hidden,false);assert.equal(p.elements.get('#start-vent').disabled,true);
+ p.run('jump();game.machine.awake=true;game.abilityRemaining=1;game.breakMachine();game.finish();for(let i=0;i<50;i++)game.update()');
+ assert.equal(p.elements.get('#return-map').hidden,false);assert.deepEqual(JSON.parse(storage.data.get(PROFILE_KEY)).ascentUnlocked,[1,2]);
+ p.elements.get('#return-map').click();assert.equal(p.elements.get('#start-vent').disabled,false);p.elements.get('#start-vent').click();
+ assert.equal(p.run('game.startFloor'),2);p.run('jump()');assert.equal(p.run('game.energy'),0);assert.equal(p.run('game.maxHeight'),1320);
+ const reloaded=browser(storage);assert.equal(reloaded.run('game.startFloor'),2);
+});
+
+test('the extended machine explosion renders valid rings for its entire lifetime',()=>{
+ const p=browser(storageWith());p.run("jump();addFeedback({type:'machine-break',x:200,y:-880});drawFeedback();for(let i=0;i<60;i++){updateFeedback();drawFeedback();}");
+ assert.equal(p.run('feedback.rings.length'),0);
 });

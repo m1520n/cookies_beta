@@ -11,11 +11,16 @@ export function obstacleAt(ball, time) {
         const raw=x+ball.vx*age*60;
         x=ball.vx>0 && raw>354 ? 708-raw : ball.vx<0 && raw<0 ? -raw : raw;
     } else if(ball.kind==='pendulum') x+=Math.sin(age*2.6)*44;
-    return {x,y:-50+ball.vy*age*60,age,wait:Math.max(0,ball.spawnAt+ball.warningDuration-time)};
+    if(ball.world){
+        x+=(ball.wind||0)*32*(1-Math.cos(Math.min(1,age/1.2)*Math.PI))/2;
+        const phase=((x%708)+708)%708;x=phase<=354?phase:708-phase;
+    }
+    return {x,y:(ball.originY??-50)+ball.vy*age*60,age,wait:Math.max(0,ball.spawnAt+ball.warningDuration-time)};
 }
 export function makeObstacle(event, time=event.at) {
     const spec=OBSTACLES[event.kind];
     const ball={id:event.id,kind:event.kind,originX:event.x,spawnAt:event.at,warningDuration:1,
+        originY:event.y??-50,world:Boolean(event.world),wind:event.wind||0,
         vx:event.kind==='ricochet' ? (event.x<177 ? spec.vx : -spec.vx) : 0,vy:spec.vy,
         radius:spec.radius,color:spec.color,rotation:0,nearDistance:Infinity,nearAwarded:false,contacted:false,broken:false,weak:false};
     return Object.assign(ball,obstacleAt(ball,time));
@@ -23,4 +28,4 @@ export function makeObstacle(event, time=event.at) {
 export function moveObstacle(ball,time) {
     Object.assign(ball,obstacleAt(ball,time));ball.rotation=ball.age*(ball.kind==='ricochet' ? 5 : 3);
 }
-export function obstacleAlive(ball) {return !ball.broken && ball.y<686 && ball.x>-46 && ball.x<400;}
+export function obstacleAlive(ball,cameraTop) {return !ball.broken && (ball.world ? ball.age<6 && (cameraTop===undefined || ball.y<cameraTop+736) : ball.y<686) && ball.x>-46 && ball.x<400;}

@@ -73,11 +73,11 @@ test('blocked storage retains a victory and cosmetics during the session',()=>{
 
 
 test('course unlocks distinguish legacy winners from new wins and persist records per style',()=>{
-    assert.deepEqual(unlockedCourses(cleanProfile({wins:1})),['greed','press','ricochet','mechanism','marathon']);
+    assert.deepEqual(unlockedCourses(cleanProfile({wins:1})),['ascent','greed','press','ricochet','mechanism','marathon']);
     const storage=memory(),store=new ProfileStore(storage);
     assert.equal(store.setCourse('mechanism'),false);
     store.recordVictory('first','press');
-    assert.deepEqual(unlockedCourses(new ProfileStore(storage).value),['greed','press','ricochet','marathon']);
+    assert.deepEqual(unlockedCourses(new ProfileStore(storage).value),['ascent','greed','press','ricochet','marathon']);
     assert.equal(store.setCourse('ricochet'),true);
     store.settle({...run('a'),mode:'press',style:'time',progress:.8,score:15});
     store.settle({...run('b'),mode:'press',style:'time',progress:.3,score:20});
@@ -105,9 +105,18 @@ test('legacy high score imports once and later short-course scores cannot inflat
 
 test('greed migrates once, pays only physical cookies and keeps a style-independent record',()=>{
  const storage=memory();storage.data.set(PROFILE_KEY,JSON.stringify({version:1,crumbs:10,selectedCourse:'ricochet',wins:1,upgrades:{start:2},records:{'press:time':{progress:.8,score:200}}}));
- const store=new ProfileStore(storage);assert.equal(store.value.selectedCourse,'greed');assert.equal(store.value.records['press:time'].score,200);
+ const store=new ProfileStore(storage);assert.equal(store.value.selectedCourse,'ascent');assert.equal(store.value.records['press:time'].score,200);
  assert.equal(store.settle({...run('greed',3,100),mode:'greed',style:'greed',score:48}).crumbs,3);
  assert.equal(store.value.crumbs,13);assert.equal(store.value.records.greed.score,48);assert.equal(store.value.courseClears.length,0);
  assert.equal(store.recordVictory('no-win','greed'),false);store.setCourse('press');assert.equal(new ProfileStore(storage).value.selectedCourse,'press');
  assert.equal(store.settle({...run('greed',999),mode:'greed'}).awarded,false);
+});
+
+test('ascent discoveries survive death and records are separate by starting floor without touching old scores',()=>{
+ const storage=memory(),store=new ProfileStore(storage);assert.equal(store.setStartFloor(2),false);
+ store.settle({...run('legacy'),mode:'greed',score:237});assert.equal(store.discoverFloor(2),true);assert.equal(store.discoverFloor(2),false);
+ assert.equal(store.setStartFloor(2),true);store.settle({...run('factory',6,30),mode:'ascent',startFloor:2,height:1800,score:30,metrics:{cause:'fall'}});
+ const reload=new ProfileStore(storage);assert.deepEqual(reload.value.ascentUnlocked,[1,2]);assert.equal(reload.value.ascentStart,2);
+ assert.equal(reload.value.records['ascent:2'].height,1800);assert.equal(reload.value.records['ascent:1'].height,0);assert.equal(reload.value.records.greed.score,237);
+ assert.equal(reload.value.lastRun.mode,'ascent');assert.equal(reload.value.lastRun.metrics.cause,'fall');assert.equal(reload.settle({...run('factory'),mode:'ascent'}).awarded,false);
 });

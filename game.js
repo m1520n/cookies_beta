@@ -1,8 +1,10 @@
-import { Game, WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from './game-model.js';
-import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock } from './progression.js';
+import {FactoryGame as Game} from './ascent-model.js?v=ascent3';
+import {GATE_Y,GATE_HEIGHT,floorName,ascentRecordKey} from './ascent-world.js?v=ascent3';
+import { WIDTH, HEIGHT, STEP, cookieWord, POWERUPS } from './game-model.js?v=ascent3';
+import { ProfileStore, NEST_UPGRADES, CARDS, STYLES, LOOKS, unlockedLooks, unlockedCourses, nextUnlock } from './progression.js?v=ascent3';
 
-import {COURSES,sectorDuration} from './courses.js';
-import {OBSTACLES,obstacleAt} from './obstacles.js';
+import {COURSES,GREED,sectorDuration} from './courses.js?v=ascent3';
+import {OBSTACLES,obstacleAt} from './obstacles.js?v=ascent3';
 
 const canvas = document.querySelector('canvas');
 const ctx = canvas.getContext('2d', { alpha: false });
@@ -18,7 +20,7 @@ const skipButton = document.querySelector('#skip-death');
 const coursesPanel=document.querySelector('#courses');
 const practiceButton=document.querySelector('#practice');
 const nextCourseButton=document.querySelector('#next-course');
-const uiValues=new Map(),birdCache=new Map(),obstacleCache=new Map();
+const uiValues=new Map(),birdCache=new Map(),obstacleCache=new Map(),factoryCache=new Map();
 function uiText(id,value){if(uiValues.get(id)!==value){document.querySelector(id).textContent=value;uiValues.set(id,value);}}
 let storage;
 try { storage = localStorage; } catch { /* Session profile remains available. */ }
@@ -76,6 +78,15 @@ function resetFeedback() {
 motionPreference?.addEventListener('change', resetFeedback);
 
 function addFeedback(event) {
+    if(event.type==='machine-awake'){announcement.textContent='Prasa obudzona. Traf rdzeń podczas Szału.';if(!motionPreference?.matches)arcadeImpact(3,'#ffb74f');return;}
+    if(event.type==='floor'){announcement.textContent='Wentylatornia. Podmuchy zakrzywiają tory przeszkód.';feedback.banner={title:event.title,color:'#85dcca',remaining:1,notice:true};return;}
+    if(event.type==='machine-break'){
+        announcement.textContent='Przejście otwarte. Wentylatornia odkryta na mapie.';
+        feedback.banner={title:'PRZEJŚCIE OTWARTE',color:'#85dcca',remaining:1,notice:true};
+        if(!motionPreference?.matches){arcadeImpact(14,'#ffcb75',.32);feedback.rings.push({x:event.x,y:event.y,color:'#ffd78f',remaining:.8,duration:.8,large:true});
+            for(let i=0;i<32;i++){const angle=i*Math.PI*2/32;feedback.particles.push({x:event.x,y:event.y,vx:Math.cos(angle)*220,vy:Math.sin(angle)*180,size:5+i%7,angle,spin:4,remaining:1,color:i%2?'#85dcca':'#ffd78f',fragment:true});}feedback.particles=feedback.particles.slice(-100);}
+        return;
+    }
     if (event.type === 'offer') { announcement.textContent = 'Wybierz jedną z dwóch cech, przelatując przez jej symbol.'; return; }
     if (event.type === 'finalPhase') return;
     if(event.type==='points'){feedback.labels.push({x:event.x,y:event.y,points:event.points,remaining:.6});return;}
@@ -282,6 +293,11 @@ function playArcade(name) {
         tone(1800, 350, .07, .018, 'square', .025);
     } else if (name.startsWith('warning-')) {
         const note={heavy:180,ricochet:440,pendulum:660}[name.slice(8)];if(note)tone(note,note,.12,.018,'sine');
+    } else if(name==='machine-awake'){
+        tone(70,140,.5,.045,'sawtooth');tone(220,220,.18,.03,'square',.3);
+    } else if(name==='machine-break'){
+        tone(130,30,.5,.075,'sawtooth');[440,660,880,1320].forEach((n,i)=>tone(n,n,.25,.03,'triangle',.06*i));
+    } else if(name==='gate-bump'){tone(110,75,.07,.018,'triangle');
     } else if (name === 'golden') {
         tone(880,1320,.12,.04,'triangle');tone(1760,1760,.16,.025,'sine',.07);
     } else if (name === 'frenzy-ready') {
@@ -345,6 +361,7 @@ const game = new Game({
     profile: profileStore.value,
     onSound: play,
     onFeedback: addFeedback,
+    onDiscover(floor){profileStore.discoverFloor(floor);},
     onVictory(id,mode) { profileStore.recordVictory(id,mode); },
     onSettle(snapshot) {
         settlement = profileStore.settle(snapshot);
@@ -355,13 +372,14 @@ const game = new Game({
         if(!game.isGreed)write('bestScore', record);
         const recordNow=currentRecord();
         const marathon=game.course.id==='marathon',pointsMode=game.isGreed||marathon;
-        document.querySelector('#result-title').textContent=game.practice ? (game.won?'Fragment opanowany':'Trening') : game.won?'Trasa ukończona!':'Jeszcze jedna próba?';
+        document.querySelector('#result-title').textContent=game.isAscent?'Jeszcze wyżej?':game.practice ? (game.won?'Fragment opanowany':'Trening') : game.won?'Trasa ukończona!':'Jeszcze jedna próba?';
         const progress=runProgress();
-        document.querySelector('#score').textContent=game.practice ? `${Math.floor(progress*100+1e-5)}% fragmentu` : pointsMode ? `${score} pkt` : `${Math.floor(progress*100+1e-5)}% trasy`;
-        document.querySelector('#best').textContent=game.practice ? 'Trening bez nagród' : pointsMode ? `Rekord: ${game.isGreed?recordNow.score:Math.max(recordNow.score,profileStore.value.legacyBest)} pkt` : `Rekord: ${Math.floor(recordNow.progress*100+1e-5)}%`;
+        document.querySelector('#score').textContent=game.isAscent?`${Math.floor(game.maxHeight/20)} m`:game.practice ? `${Math.floor(progress*100+1e-5)}% fragmentu` : pointsMode ? `${score} pkt` : `${Math.floor(progress*100+1e-5)}% trasy`;
+        document.querySelector('#best').textContent=game.isAscent?`Rekord: ${Math.floor(recordNow.height/20)} m · ${recordNow.score} pkt`:game.practice ? 'Trening bez nagród' : pointsMode ? `Rekord: ${game.isGreed?recordNow.score:Math.max(recordNow.score,profileStore.value.legacyBest)} pkt` : `Rekord: ${Math.floor(recordNow.progress*100+1e-5)}%`;
         document.querySelector('#run-detail').textContent=game.course.name;
         document.querySelector('#earned').textContent=game.practice?'':`+${settlement?.crumbs||0} okruchów`;
         practiceButton.disabled=!game.checkpoint;practiceButton.hidden=game.isGreed||game.won&&!game.practice;
+        document.querySelector('#return-map').hidden=!game.isAscent;
         document.querySelector('#run-detail').hidden=game.isGreed;document.querySelector('#earned').hidden=game.isGreed;
         practiceButton.textContent=game.practice?'Powtórz fragment':'Trening fragmentu';
         restartButton.textContent=game.practice?'Normalna próba':'Jeszcze raz';
@@ -369,7 +387,7 @@ const game = new Game({
         nextCourseButton.hidden=game.practice||!game.won||marathon||!next||!unlockedCourses(profileStore.value).includes(next.id);
         restartButton.setAttribute('class',nextCourseButton.hidden?'':'secondary');
         for(const id of ['#next-goal','#highlight','#unlock-progress','#result-nest'])document.querySelector(id).hidden=true;
-        announcement.textContent=game.isGreed?`Koniec rundy. Wynik ${score}. Rekord ${recordNow.score}.`:`${game.practice?'Trening.':game.won?'Zwycięstwo.':'Koniec rundy.'} Postęp ${Math.floor(progress*100)} procent.`;
+        announcement.textContent=game.isAscent?`Koniec próby. Wysokość ${Math.floor(game.maxHeight/20)} metrów. Rekord ${Math.floor(recordNow.height/20)}.`:game.isGreed?`Koniec rundy. Wynik ${score}. Rekord ${recordNow.score}.`:`${game.practice?'Trening.':game.won?'Zwycięstwo.':'Koniec rundy.'} Postęp ${Math.floor(progress*100)} procent.`;
         syncPanels();
         restartButton.focus({ preventScroll: true });
     },
@@ -383,8 +401,9 @@ function syncPanels(){
     document.querySelector('#open-nest').disabled=!['ready','over'].includes(game.state);
     document.querySelector('#open-courses').disabled=!['ready','over'].includes(game.state);
     document.querySelector('#play-greed').disabled=!['ready','over'].includes(game.state);
-    document.querySelector('#play-greed').setAttribute('aria-pressed',String(game.isGreed));
-    document.querySelector('#hud').setAttribute('data-mode',game.course.id);
+    document.querySelector('#play-greed').setAttribute('aria-pressed',String(Boolean(game.isAscent)));
+    document.querySelector('#hud').setAttribute('data-mode',game.isGreed?'greed':game.course.id);
+    syncMap();
     document.querySelector('#hud-charges').hidden=!game.isGreed;
     if(!game.isGreed)document.querySelector('#hud').setAttribute('data-frenzy','');
     result.hidden=game.state!=='over'||!nestPanel.hidden||!coursesPanel.hidden;pausePanel.hidden=!game.paused;
@@ -429,7 +448,9 @@ resumeButton.addEventListener('click', () => setPaused(false));
 skipButton.addEventListener('click',jump);
 practiceButton.addEventListener('click',()=>{clearRunView();game.startPractice();lastPanelState='';syncPanels();canvas.focus();});
 nextCourseButton.addEventListener('click',()=>{const next=COURSES[COURSES.findIndex(course=>course.id===game.course.id)+1];if(next)selectCourse(next.id);});
-document.querySelector('#play-greed').addEventListener('click',()=>selectCourse('greed'));
+document.querySelector('#play-greed').addEventListener('click',()=>selectCourse('ascent'));
+ document.querySelector('#return-map').addEventListener('click',()=>selectCourse('ascent'));
+ for(const [id,floor] of [['#start-press',1],['#start-vent',2]])document.querySelector(id).addEventListener('click',()=>{if(profileStore.setStartFloor(floor))selectCourse('ascent');});
  document.querySelector('#open-courses').addEventListener('click',openCourses);
 document.querySelector('#close-courses').addEventListener('click',closeCourses);
 document.querySelector('#new-marathon').addEventListener('click',()=>{game.fixedSeed=undefined;game.retrySeed=undefined;selectCourse('marathon');});
@@ -479,24 +500,32 @@ function selectCourse(id){
     clearRunView();coursesPanel.hidden=true;nestPanel.hidden=true;lastPanelState='';syncPanels();canvas.focus();
 }
 function closeCourses(){coursesPanel.hidden=true;lastPanelState='';syncPanels();if(game.state==='over')restartButton.focus();else canvas.focus();}
+function syncMap(){
+    document.querySelector('#floor-picker').hidden=!(game.isAscent&&game.state==='ready'&&nestPanel.hidden&&coursesPanel.hidden);
+    const unlocked=profileStore.value.ascentUnlocked.includes(2);
+    document.querySelector('#start-vent').disabled=!unlocked;
+    document.querySelector('#start-press').setAttribute('aria-pressed',String(game.startFloor===1));
+    document.querySelector('#start-vent').setAttribute('aria-pressed',String(game.startFloor===2));
+    uiText('#vent-status',unlocked?'Odkryta · możesz zacząć tutaj':'Rozbij rdzeń prasy, żeby odkryć');
+}
 function openCourses(){
     if(!['ready','over'].includes(game.state))return;profileStore.reload();nestPanel.hidden=true;result.hidden=true;
     const list=document.querySelector('#course-items');list.replaceChildren();
-    for(const course of COURSES){
+    for(const course of [...COURSES,GREED]){
         const b=document.createElement('button');b.type='button';b.className='choice';b.disabled=!unlockedCourses(profileStore.value).includes(course.id);
-        const title=document.createElement('strong');title.textContent=`${course.name} · ${course.duration}s`;
-        const detail=document.createElement('span'),record=profileStore.value.records[`${course.id}:${profileStore.value.runStyle}`];
-        detail.textContent=b.disabled?`Ukończ ${course.id==='ricochet'?'Tłocznię':'Rykoszet'}`:course.id==='marathon'?`Finał i dalszy lot · rekord ${Math.max(record.score,profileStore.value.legacyBest)} pkt`:`Rekord ${Math.floor(record.progress*100)}%`;
+        const title=document.createElement('strong');title.textContent=course.id==='greed'?'Łasuch · bez końca':`${course.name} · ${course.duration}s`;
+        const detail=document.createElement('span'),record=profileStore.value.records[course.id==='greed'?'greed':`${course.id}:${profileStore.value.runStyle}`];
+        detail.textContent=b.disabled?`Ukończ ${course.id==='ricochet'?'Tłocznię':'Rykoszet'}`:course.id==='greed'?`Arcade · rekord ${record.score} pkt`:course.id==='marathon'?`Finał i dalszy lot · rekord ${Math.max(record.score,profileStore.value.legacyBest)} pkt`:`Rekord ${Math.floor(record.progress*100)}%`;
         b.setAttribute('aria-pressed',String(game.course.id===course.id));b.append(title,detail);b.addEventListener('click',()=>selectCourse(course.id));list.append(b);
     }
-    document.querySelector('#new-marathon').hidden=game.course.id!=='marathon';coursesPanel.hidden=false;document.querySelector('#close-courses').focus();
+    document.querySelector('#new-marathon').hidden=game.course.id!=='marathon';coursesPanel.hidden=false;syncMap();document.querySelector('#close-courses').focus();
 }
 function openNest() {
     if (!['ready', 'over'].includes(game.state)) return;
     coursesPanel.hidden=true;profileStore.reload();
     result.hidden = true;
     for(const id of ['#challenge-options','#challenge-upgrades','#challenge-guide'])document.querySelector(id).hidden=game.isGreed;
-    document.querySelector('#nest-intro').textContent=game.isGreed?'Łasuch: równy start. Ulepszenia i pióro działają w Wyzwaniach.':'Ulepszenia na kolejne próby. Każde ma dwa poziomy.';
+    document.querySelector('#nest-intro').textContent=game.isGreed?'Fabryka i Łasuch: równy start. Ulepszenia i pióro działają w krótkich trasach i Maratonie.':'Ulepszenia na kolejne próby. Każde ma dwa poziomy.';
     document.querySelector('#crumb-balance').textContent = `${profileStore.value.crumbs} okruchów`;
     const styles = document.querySelector('#run-styles'); styles.replaceChildren();
     for (const style of STYLES) {
@@ -525,8 +554,8 @@ function openNest() {
     const build = profileStore.value.lastBuild.map(item=>`${CARDS.find(card=>card.id===item.id)?.name} ${item.rank}`).join(' · ');
     document.querySelector('#last-build').textContent = build ? `Ostatni zestaw: ${build}` : 'Zestaw: wybierz symbole torem lotu. Maksymalnie 3 cechy, każda do poziomu 2.';
     const last = profileStore.value.lastRun;
-    document.querySelector('#last-build').hidden=last?.mode==='greed';
-    document.querySelector('#last-metrics').textContent = last?.mode==='greed' ? `${Math.floor(last.elapsed)} s lotu · złote ciastka: ${last.metrics.goldenCookies} · Szały: ${last.metrics.abilities} · rozbicia: ${last.metrics.shatters} · pierwszy Szał: ${last.metrics.firstFrenzyAt?last.metrics.firstFrenzyAt.toFixed(1)+' s':'—'} · rewanż: ${last.metrics.retrySeconds.toFixed(1)} s` : last ? `${Math.floor(last.elapsed)} s lotu · ${last.metrics.nearMisses} uników · ${last.metrics.abilities} zdolności · ${Math.round(last.metrics.shieldSeconds)} s ochrony · ${Math.round(last.metrics.twoPowerSeconds)} s z dwiema mocami · ${last.metrics.rescues} ratunków · cechy ${last.metrics.offersTaken}/${last.metrics.offersSeen} · pierwsza cecha ${last.metrics.firstTraitAt?Math.round(last.metrics.firstTraitAt)+'s':'—'} · rewanż ${last.metrics.retrySeconds.toFixed(1)}s · koniec: ${{ball:'piłka',floor:'dolne kolce',ceiling:'górne kolce',complete:'ukończenie'}[last.metrics.cause]}` : 'Rozegraj pierwszą rundę.';
+    document.querySelector('#last-build').hidden=['ascent','greed'].includes(last?.mode);
+    document.querySelector('#last-metrics').textContent = ['ascent','greed'].includes(last?.mode) ? `${Math.floor(last.elapsed)} s lotu · złote ciastka: ${last.metrics.goldenCookies} · Szały: ${last.metrics.abilities} · rozbicia: ${last.metrics.shatters} · pierwszy Szał: ${last.metrics.firstFrenzyAt?last.metrics.firstFrenzyAt.toFixed(1)+' s':'—'} · rewanż: ${last.metrics.retrySeconds.toFixed(1)} s` : last ? `${Math.floor(last.elapsed)} s lotu · ${last.metrics.nearMisses} uników · ${last.metrics.abilities} zdolności · ${Math.round(last.metrics.shieldSeconds)} s ochrony · ${Math.round(last.metrics.twoPowerSeconds)} s z dwiema mocami · ${last.metrics.rescues} ratunków · cechy ${last.metrics.offersTaken}/${last.metrics.offersSeen} · pierwsza cecha ${last.metrics.firstTraitAt?Math.round(last.metrics.firstTraitAt)+'s':'—'} · rewanż ${last.metrics.retrySeconds.toFixed(1)}s · koniec: ${{ball:'piłka',floor:'dolne kolce',ceiling:'górne kolce',fall:'upadek',complete:'ukończenie'}[last.metrics.cause]}` : 'Rozegraj pierwszą rundę.';
     const list = document.querySelector('#nest-items'); list.replaceChildren();
     for (const item of NEST_UPGRADES) {
         const rank = profileStore.value.upgrades[item.id];
@@ -543,12 +572,12 @@ function openNest() {
     }
     const unlock = nextUnlock(profileStore.value);
     document.querySelector('#nest-unlocks').textContent = unlock ? `Nowa cecha: ${unlock.name} — ${unlock.current}/${unlock.target} ${unlock.unit}` : `Wygrane: ${profileStore.value.wins} · najlepsza seria: ${profileStore.value.bestChain}`;
-    nestPanel.hidden = false; document.querySelector('#close-nest').focus({ preventScroll: true });
+    nestPanel.hidden = false;syncMap(); document.querySelector('#close-nest').focus({ preventScroll: true });
 }
 
 function resize() {
     const ratio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-    rasterRatio = ratio; backgroundCache = null; previousBackgroundCache = null; edgeCache = null; glowCache.clear();birdCache.clear();obstacleCache.clear();
+    rasterRatio = ratio; backgroundCache = null; previousBackgroundCache = null; edgeCache = null; glowCache.clear();birdCache.clear();obstacleCache.clear();factoryCache.clear();
     canvas.width = Math.round(WIDTH * ratio);
     canvas.height = Math.round(HEIGHT * ratio);
     ctx.setTransform(canvas.width / WIDTH, 0, 0, canvas.height / HEIGHT, 0, 0);
@@ -573,7 +602,7 @@ function rotatedSprite(sprite, x, y, rotation, stretch = 0) {
 function drawFeedback() {
     ctx.save();
     for (const ring of feedback.rings) {
-        const progress = 1 - ring.remaining / .5;
+        const progress = Math.max(0,Math.min(1,1-ring.remaining/(ring.duration||.5)));
         ctx.globalAlpha = (1 - progress) * .65;
         ctx.strokeStyle = ring.color;
         ctx.lineWidth = 2;
@@ -644,7 +673,63 @@ function layer(width, height) {
     context.setTransform(rasterRatio, 0, 0, rasterRatio, 0, 0);
     return { image, context };
 }
+function factoryLayer(key,paint,width=400,height=640){
+    if(!factoryCache.has(key)){const cache=layer(width,height);paint(cache.context);factoryCache.set(key,cache.image);}
+    return factoryCache.get(key);
+}
+function drawFactoryBackground(){
+    const zone=(vent)=>factoryLayer(vent?'shaft-vent':'shaft-press',h=>{
+        const g=h.createLinearGradient(0,0,400,640);g.addColorStop(0,vent?'#173e49':'#29303d');g.addColorStop(1,vent?'#0e2435':'#151e30');h.fillStyle=g;h.fillRect(0,0,400,640);
+        for(const x of [0,368]){h.fillStyle=vent?'#243e4b':'#343b49';h.fillRect(x,0,32,640);h.fillStyle='#ffffff0c';h.fillRect(x+6,0,3,640);h.fillStyle='#030d1c77';h.fillRect(x+25,0,4,640);}
+        h.strokeStyle=vent?'#7ce7ce10':'#dab2820b';h.lineWidth=1;
+        for(let x=60;x<360;x+=40){h.beginPath();h.moveTo(x,0);h.lineTo(x,640);h.stroke();}
+    });
+    ctx.drawImage(zone(false),0,0,400,640);
+    const blend=game.startFloor===2?1:game.machine.broken?Math.min(1,Math.max(0,(game.maxHeight-GATE_HEIGHT)/160)):0;
+    if(blend){ctx.save();ctx.globalAlpha=motionPreference?.matches?1:blend;ctx.drawImage(zone(true),0,0,400,640);ctx.restore();}
+    for(let worldY=Math.floor(game.cameraTop/160)*160;worldY<game.cameraTop+640;worldY+=160){
+        const y=worldY-game.cameraTop;ctx.strokeStyle='#9badc01c';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(32,y);ctx.lineTo(368,y);ctx.stroke();
+        for(const x of [14,386]){ctx.fillStyle='#8d9ba6';ctx.fillRect(x-2,y-3,4,6);}
+    }
+    const blades=factoryLayer('fan',h=>{
+        h.strokeStyle='#b1e7de55';h.lineWidth=3;h.beginPath();h.arc(32,32,29,0,Math.PI*2);h.stroke();
+        h.fillStyle='#83cbb6';for(let i=0;i<4;i++){h.save();h.translate(32,32);h.rotate(i*Math.PI/2);h.beginPath();h.moveTo(0,0);h.bezierCurveTo(10,-27,31,-22,20,-7);h.lineTo(0,0);h.fill();h.restore();}
+        h.fillStyle='#d6e6df';h.beginPath();h.arc(32,32,5,0,Math.PI*2);h.fill();
+    },64,64);
+    for(let i=Math.max(0,Math.floor((-game.cameraTop-1100)/400));i<Math.ceil((-game.cameraTop+640)/400)+2;i++){
+        const worldY=320-1320-i*400,y=worldY-game.cameraTop;if(y<-50||y>690)continue;
+        for(const x of [37,363]){ctx.save();ctx.translate(x,y);ctx.rotate(motionPreference?.matches?0:game.ticks*.035*(i%2?1:-1));ctx.globalAlpha=.65;ctx.drawImage(blades,-27,-27,54,54);ctx.restore();}
+        if(!motionPreference?.matches){ctx.save();ctx.strokeStyle='#85dcca28';ctx.lineWidth=1.5;for(let n=0;n<6;n++){
+            const x=60+((n*47+game.ticks*(i%2?1:-1))%280+280)%280;ctx.beginPath();ctx.moveTo(x,y-20+n*8);ctx.quadraticCurveTo(x+14,y-30+n*8,x+28,y-20+n*8);ctx.stroke();}ctx.restore();}
+    }
+}
+function drawFactoryMachine(){
+    if(GATE_Y+125<game.cameraTop||GATE_Y-125>game.cameraTop+640)return;
+    const m=game.machine,opening=m.broken?(motionPreference?.matches?1:Math.min(1,(game.elapsed-(m.brokenAt??game.elapsed-1))/.65)):0;
+    const body=factoryLayer('press-body',h=>{
+        h.fillStyle='#080f1d';h.fillRect(0,20,400,135);h.fillStyle='#465260';h.fillRect(0,28,400,12);h.fillRect(0,140,400,9);
+        for(const x of [18,340]){h.fillStyle='#6a7883';h.fillRect(x,0,42,180);h.fillStyle='#b4c0c5';h.fillRect(x+7,0,6,180);h.fillStyle='#283744';h.fillRect(x+32,0,6,180);}
+        h.strokeStyle='#a8b7c13d';h.lineWidth=1;for(let y=48;y<134;y+=16){h.beginPath();h.moveTo(68,y);h.lineTo(332,y);h.stroke();}
+    },400,180);
+    ctx.save();ctx.globalAlpha=1-opening*.55;ctx.drawImage(body,0,GATE_Y-90,400,180);ctx.restore();
+    const gap=opening*202;
+    ctx.fillStyle='#ad9b6a';ctx.fillRect(-gap,GATE_Y-9,172,18);ctx.fillRect(228+gap,GATE_Y-9,172,18);
+    ctx.fillStyle='#1b2835';for(let x=0;x<400;x+=24){if(Math.abs(x-200)<32)continue;const dir=x<200?-1:1;ctx.fillRect(x+dir*gap,GATE_Y-5,13,10);}
+    if(!m.broken){
+        const awake=m.awake,color=awake?'#ffb74f':'#6d7d89';
+        if(awake&&!motionPreference?.matches)drawGlow(200,GATE_Y,'#ffb74f',108);
+        ctx.fillStyle='#101c2d';ctx.strokeStyle=color;ctx.lineWidth=5;ctx.beginPath();ctx.arc(200,GATE_Y,28,0,Math.PI*2);ctx.fill();ctx.stroke();
+        ctx.strokeStyle=awake?'#ffe2a0':'#425463';ctx.lineWidth=2;ctx.beginPath();ctx.arc(200,GATE_Y,18,0,Math.PI*2);ctx.stroke();
+        if(awake){text('✦',200,GATE_Y+1,25,color,800);text('SZAŁ → RDZEŃ',200,GATE_Y-49,11,'#ffcf87',800);}
+        else{spriteCookie[0].draw(ctx,185,GATE_Y-10);text('ZBUDŹ PRASĘ',200,GATE_Y-49,11,'#aebdc9',800);}
+        for(let i=0;i<6;i++){ctx.fillStyle=i<m.cookies?'#ffc96c':'#273744';ctx.strokeStyle='#92a0ac66';ctx.lineWidth=1;ctx.beginPath();ctx.arc(125+i*30,GATE_Y+65,6,0,Math.PI*2);ctx.fill();ctx.stroke();}
+    } else {
+        ctx.strokeStyle='#85dcca77';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(178,GATE_Y+10);ctx.lineTo(200,GATE_Y-12);ctx.lineTo(222,GATE_Y+10);ctx.stroke();
+    }
+}
+
 function drawBackground() {
+    if(game.isAscent){drawFactoryBackground();return;}
     if (!backgroundCache || backgroundKey !== game.stageIndex) {
         previousBackgroundCache = backgroundCache;
         backgroundCache = layer(WIDTH, HEIGHT); backgroundKey = game.stageIndex;
@@ -712,13 +797,13 @@ function drawGlow(x, y, color, size = 80) {
     ctx.drawImage(glowCache.get(color), x - size / 2, y - size / 2, size, size);
 }
 
-function currentRecord(){return profileStore.value.records[game.isGreed?'greed':`${game.course.id}:${game.profile.runStyle}`];}
+function currentRecord(){return profileStore.value.records[game.isAscent?ascentRecordKey(game.startFloor):game.isGreed?'greed':`${game.course.id}:${game.profile.runStyle}`];}
 function runProgress(){return game.practice?Math.max(0,Math.min(1,(game.courseTime-(game.practiceEnd-sectorDuration(game.course)))/sectorDuration(game.course))):game.progress;}
 function drawHud(){
     const progress=runProgress();
     document.querySelector('#hud-best').hidden=false;document.querySelector('.progress-track').setAttribute('aria-label','Postęp trasy');
     const record=currentRecord();
-    if(game.isGreed){drawGreedHud();return;}
+    if(game.isGreed){drawGreedHud();if(game.isAscent){uiText('#hud-score',`${Math.floor(game.maxHeight/20)} m`);uiText('#hud-course',game.floor===2?'Wentylatornia':game.machine.awake?'Rozbij rdzeń':`Tłocznia · ${game.machine.cookies}/6`);}return;}
     uiText('#hud-score',String(game.score));uiText('#hud-course',`${game.practice?'Trening · ':''}${game.course.name} · ${game.level}`);uiText('#hud-percent',`${Math.floor(progress*100+1e-5)}%`);
     document.querySelector('#hud-progress').style.setProperty('transform',`scaleX(${progress})`);
     document.querySelector('#hud-best').style.setProperty('--best',`${(game.practice?0:record.progress)*100}%`);
@@ -839,6 +924,12 @@ function drawObstacle(ball){
     if(debugCollisions){ctx.save();ctx.strokeStyle='#ff77ce';ctx.beginPath();ctx.arc(ball.x+23,ball.y+22,ball.radius,0,Math.PI*2);ctx.stroke();ctx.restore();}
 }
 function drawWarning(ball){
+    if(game.isAscent){
+        ctx.save();ctx.strokeStyle=ball.color;ctx.fillStyle=ball.color;ctx.lineWidth=1.5;ctx.globalAlpha=.65;ctx.setLineDash([3,5]);ctx.beginPath();
+        for(let i=0;i<=20;i++){const p=obstacleAt(ball,ball.spawnAt+1+i*.06);if(i)ctx.lineTo(p.x+23,p.y+22);else ctx.moveTo(p.x+23,p.y+22);}ctx.stroke();ctx.setLineDash([]);
+        const p=obstacleAt(ball,ball.spawnAt+1);const y=Math.max(game.cameraTop+34,Math.min(game.cameraTop+606,p.y+22));
+        ctx.beginPath();ctx.moveTo(p.x+18,y-6);ctx.lineTo(p.x+28,y-6);ctx.lineTo(p.x+23,y+3);ctx.closePath();ctx.fill();ctx.restore();return;
+    }
     ctx.save();ctx.strokeStyle=ball.color;ctx.fillStyle=ball.color;ctx.lineWidth=1.5;ctx.globalAlpha=.5;ctx.setLineDash([3,5]);ctx.beginPath();
     for(let i=0;i<=12;i++){const p=obstacleAt(ball,ball.spawnAt+ball.warningDuration+i*.05);const y=Math.max(34,p.y+22);if(i===0)ctx.moveTo(p.x+23,y);else ctx.lineTo(p.x+23,y);}ctx.stroke();ctx.setLineDash([]);
     const entry=obstacleAt(ball,ball.spawnAt+ball.warningDuration+.05);ctx.globalAlpha=.9;
@@ -874,6 +965,7 @@ function drawShield(x, y) {
 function draw() {
     drawBackground();
     ctx.save();
+    if(game.isAscent)ctx.translate(0,-game.cameraTop);
     if (game.state === 'dying' && !motionPreference?.matches) {
         const origin = game.deathOrigin;
         const zoom = 1 + .06 * Math.sin(Math.min(1, game.deathElapsed / (game.deathDuration || .7)) * Math.PI);
@@ -884,11 +976,13 @@ function draw() {
         const amount = feedback.strength * decay;
         ctx.translate(Math.sin(game.ticks * 2.399) * amount, Math.cos(game.ticks * 3.731) * amount * .75);
         if (game.state === 'dying') {
-            ctx.translate(WIDTH / 2, HEIGHT / 2); ctx.rotate(Math.sin(game.ticks * 1.7) * amount * .0009);
-            ctx.translate(-WIDTH / 2, -HEIGHT / 2);
+            const centerY=HEIGHT/2+(game.isAscent?game.cameraTop:0);
+            ctx.translate(WIDTH / 2, centerY); ctx.rotate(Math.sin(game.ticks * 1.7) * amount * .0009);
+            ctx.translate(-WIDTH / 2, -centerY);
         }
     }
 
+    if(game.isAscent)drawFactoryMachine();
     if (['playing', 'dying','celebrating'].includes(game.state)) {
         drawCookie(); drawOffers();
     }
@@ -940,8 +1034,15 @@ function draw() {
         ctx.restore();
     }
 
-    drawEdges();
-    if (game.state === 'ready') {
+    if(!game.isAscent)drawEdges();
+    if (game.state === 'ready' && game.isAscent) {
+        ctx.save();ctx.translate(0,game.cameraTop);
+        text('FABRYKA CIASTEK',200,138,13,'#a4b5ce',800);text('Co jest wyżej?',200,184,35,'#ffd78f',800);
+        text('Wspinaj się. Otwieraj kolejne piętra.',200,227,15,'#a4b5ce');
+        text(game.startFloor===2?'Podmuchy zakrzywiają tory przeszkód':'Ciastka budzą prasę · Szał rozbija rdzeń',200,254,12,'#ffcd85');
+        text('Dotknij lub spacja — leć w górę',200,574,14,'#a4b5ce');ctx.restore();
+    }
+    if (game.state === 'ready' && !game.isAscent) {
         text('ZŁAP APETYT NA REKORD', WIDTH / 2, 142, 11, '#97acc8', 800);
         text('Ciastkobranie', WIDTH / 2, 184, 41, '#ffd78f', 800);
         text(game.isGreed?'Łasuch · leć po rekord':`${game.course.name} · ${game.course.duration}s`, WIDTH / 2, 227, 18, '#a4b5ce');
@@ -995,7 +1096,7 @@ function loop(timestamp) {
     requestAnimationFrame(loop);
 }
 
-syncMute();
+syncMute();syncPanels();
 if (!ctx) {
     status.textContent = 'Ta przeglądarka nie obsługuje gry. Otwórz ją w nowszej przeglądarce.';
 } else {

@@ -151,3 +151,12 @@ button:disabled { cursor: default; opacity: .45; }
     .perf {grid-column:1;grid-row:3;max-width:150px;align-self:start;margin-top:10px;}
     #hud[data-mode="greed"] #hud-energy-label {white-space:normal;max-width:46px;line-height:10px;}
 }
+
+#floor-picker { position:absolute;top:60%;left:10%;right:10%;display:grid;gap:8px; }
+#floor-picker button {display:flex;flex-direction:column;gap:4px;text-align:left;padding:10px 14px;background:#132338ed;border-color:#556d85;min-height:54px;box-shadow:0 4px 15px #06102088;}
+#floor-picker strong {font-size:14px;color:#d8e6ec;}
+#floor-picker span {font-size:10px;color:#9fb4c8;}
+#floor-picker button[aria-pressed="true"] {border-color:#ffbf69;background:#302d2a;}
+#floor-picker button[aria-pressed="true"] strong {color:#ffd78f;}
+#floor-picker button:disabled {opacity:.65;}
+@media(max-height:450px){#floor-picker {top:59%;gap:4px;left:7%;right:7%;}#floor-picker button{min-height:39px;padding:5px 8px;gap:2px;}#floor-picker strong{font-size:11px;}#floor-picker span{font-size:8px;}}
